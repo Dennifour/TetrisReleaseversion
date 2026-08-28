@@ -439,7 +439,7 @@ html[lang=ko] .fold summary h3{letter-spacing:.02em}
 .seat-row.ready .nm{color:#4fe0a8}
 .rule-block{display:flex;flex-direction:column;align-items:flex-start;gap:6px}
 .seat-col{display:flex;flex-direction:column;align-items:stretch;gap:14px;width:100%}
-#b-ready{width:auto;text-align:center;border:1.5px solid var(--line-strong)}
+#b-ready{width:auto;align-self:center;text-align:center;border:1.5px solid var(--line-strong);padding-inline:.4em}
 #b-ready.ready{border-color:#4fe0a8;color:#4fe0a8}
 #b-ready.on::after,#b-ready:active::after{opacity:0}
 
@@ -463,6 +463,13 @@ html[lang=ko] .fold summary h3{letter-spacing:.02em}
 .chat-log .msg.mine .txt{background:#fff;color:#0a0a0c}
 .room-chat .chat-compose{display:flex;gap:8px;flex:0 0 auto;padding:12px;border-top:1px solid var(--line)}
 .room-chat .chat-compose input.tf{flex:1 1 auto}
+.chat-send{
+  flex:0 0 auto;width:44px;height:44px;border-radius:var(--radius-sm,10px);
+  border:1px solid var(--line);background:var(--surface);color:var(--fg-dim);
+  display:grid;place-items:center;cursor:pointer;
+}
+.chat-send svg{width:17px;height:17px;fill:currentColor}
+.chat-send:hover{color:var(--fg);border-color:var(--line-strong)}
 
 @media (min-width:760px){
   #v-room .card{flex-direction:row;align-items:stretch;height:calc(100vh - env(safe-area-inset-top) - 32px)}
@@ -671,6 +678,9 @@ html[lang=ko] .fold summary h3{letter-spacing:.02em}
       <div class="chat-log" id="chat-log"></div>
       <form class="chat-compose" id="chatbar">
         <input class="tf" id="chat-in" maxlength="120" autocomplete="off" data-i18n-ph="ph_chat">
+        <button class="chat-send" id="chat-send" type="submit" data-i18n-aria="chat_send">
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3.4 20.4 21 12 3.4 3.6 3.4 10.2 15 12 3.4 13.8Z"/></svg>
+        </button>
       </form>
     </div>
   </div>
@@ -1009,6 +1019,7 @@ const I18N = {
   c_video:["VIDEO","화면"],
   cancel:["CANCEL","취소"],
   chat_empty:["No messages yet.","아직 메시지가 없습니다."],
+  chat_send:["Send","보내기"],
   chat_t:["Chat","채팅"],
   copied:["Copied.","복사했습니다."],
   copyfail:["Could not copy automatically — the code is selected, copy it by hand.","자동 복사에 실패했습니다 — 코드가 선택되어 있으니 직접 복사해 주세요."],
