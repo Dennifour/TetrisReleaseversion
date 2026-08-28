@@ -206,6 +206,12 @@ body.swap #act-wrap{transform:translate(calc(var(--shift-x,0px) * -1),var(--shif
 .pause-menu{
   --edge:max(16px,5vw);--col:min(460px,100%);
   position:fixed;inset:0;z-index:16;display:flex;justify-content:flex-start;
+  /* Same reasoning as .veil: sized off the visual viewport (JS-updated),
+     not the layout one, so a mobile browser's toolbar chrome — which
+     shrinks what's actually visible without shrinking a plain 100vh —
+     can't push the bottom item (quit, or the game-over stats/button)
+     past the edge of the screen. */
+  height:var(--vvh,100dvh);
   padding:calc(env(safe-area-inset-top) + 16px) var(--edge) 16px;
   background:rgba(10,10,12,.94);
   overflow:hidden auto;
@@ -277,13 +283,10 @@ h3:first-of-type{margin-top:4px}
 .mi[disabled]{opacity:.35;pointer-events:none}
 .mi.ctr[disabled].on{opacity:.9}
 
-/* records: a plain ledger, nothing to press */
-.recs{display:grid;gap:7px}
-.rec{
-  display:flex;align-items:baseline;justify-content:space-between;gap:16px;
-  background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-sm,10px);
-  padding:18px 20px;
-}
+/* records: a plain ledger, nothing to press — no card, no border, just
+   key/value text rows like the rest of the bare-text UI. */
+.recs{display:grid;gap:16px}
+.rec{display:flex;align-items:baseline;justify-content:space-between;gap:16px}
 .rec .k{font-size:12px;letter-spacing:.13em;text-transform:uppercase;color:var(--fg-faint);font-weight:600;line-height:1.4}
 .rec .v{font-size:clamp(19px,4.6vmin,26px);font-weight:600;letter-spacing:.04em;color:var(--fg);white-space:nowrap;font-variant-numeric:tabular-nums}
 .rec.none .v{color:var(--fg-faint);font-size:clamp(14px,3.2vmin,16px)}
@@ -292,7 +295,7 @@ h3:first-of-type{margin-top:4px}
 @media (max-height:600px){
   .brand{margin-bottom:12px}
   .tag{margin-bottom:14px}
-  .rec{padding:11px 20px}
+  .recs{gap:11px}
   .mi{padding:6px 14px}
   h3{margin-top:20px}
   .sp,.seat-row{padding:11px}
