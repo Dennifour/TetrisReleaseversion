@@ -29,6 +29,10 @@ This repository is a single-file Tetris implementation: `Tetris_version1.html`. 
 - Below 760px width the two stack sequentially — selecting a rail item hides the rail and shows `.panel-open`, revealing a `.panel-back` to return to the list. At 760px and up they render side-by-side (rail column + panel column) via a `min-width:760px` media query, mirroring the breakpoint pattern used elsewhere in the file.
 - Settings tabs (general/video/audio/controls/online) and the lobby's server/P2P panels both use this component; `UI.openTab()` and `UI.doOnline()`/`refreshRooms()` drive it for each respectively.
 
+### Pause menu (`#pause-menu`)
+- The in-game pause overlay is a standalone `.pause-menu` element, not a `.veil` — it sits above live gameplay instead of replacing a screen, so it stays out of `UI.show()`'s screen-navigation bookkeeping (`PARENT` map, `cur`, `afterScreen` cleanup) while reusing the same `.mi.nav`/`.card` look. `UI.togglePause()`/`openPauseMenu()`/`closePauseMenu()` (~line 3781) drive it; the `pause` input action (Escape, the pad's pause button, gamepad Start) calls it.
+- Solo/sprint/speed actually set `G.paused` (so `Game.tick()` stops), with resume/restart/quit-to-menu options. Versus never sets `G.paused` — the match keeps ticking for the other seats while the local menu is up — and `.pause-menu.versus` hides the restart option, since a live match isn't something one player restarts locally; quitting it calls `UI.leaveRoom()` instead of nulling `G` directly.
+
 ### Game modes
 Selected via `data-go`/`data-speed` buttons on the Home/Play/Speed screens, which call `startGame(mode)` and set `Game.mode` to `"solo"` (marathon), `"sprint"` (40-line), `"speed"`, or `"versus"`. Personal bests are kept in `REC` (~line 851: `marathon`, `sprint`, `speed` per difficulty, `wins`) and persisted through `store` (~line 753, a thin `localStorage` wrapper, keys prefixed `tfx:`). `noteRun(g, won, secs)` (~line 864) updates records at the end of a run; the Records screen renders them via `UI.renderRecords()`.
 
