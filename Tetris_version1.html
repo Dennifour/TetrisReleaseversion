@@ -171,9 +171,11 @@ body.swap #act-wrap{transform:translate(calc(var(--shift-x,0px) * -1),var(--shif
 .abtn.hit{background:var(--fg);border-color:var(--fg);color:var(--bg);transform:scale(.95)}
 
 /* --- screens --- */
-/* Screens cross-fade on visibility rather than display, so both directions
-   transition and the canvas underneath keeps painting. Nothing is
-   panelled: a screen is a page, read against one column. */
+/* Screens switch on visibility rather than display, so the canvas
+   underneath keeps painting — but the switch itself is instant, no
+   cross-fade, so menu navigation never leaves a blank gap between
+   screens. Nothing is panelled: a screen is a page, read against one
+   column. */
 .veil{
   --edge:max(16px,5vw);
   --col:min(460px,100%);
@@ -182,10 +184,9 @@ body.swap #act-wrap{transform:translate(calc(var(--shift-x,0px) * -1),var(--shif
   background:rgba(10,10,12,.94);
   overflow:hidden auto;overscroll-behavior:contain;touch-action:pan-y;
   opacity:0;visibility:hidden;pointer-events:none;
-  transition:opacity .18s ease .25s,visibility 0s .43s;
 }
 :root[data-ui-theme="light"] .veil{background:rgba(255,255,255,.96)}
-.veil.on{opacity:1;visibility:visible;pointer-events:auto;transition:opacity .26s ease}
+.veil.on{opacity:1;visibility:visible;pointer-events:auto}
 
 /* The in-game pause overlay is deliberately not a .veil: it sits above live
    gameplay rather than replacing a screen, so it stays out of UI.show()'s
@@ -202,24 +203,7 @@ body.swap #act-wrap{transform:translate(calc(var(--shift-x,0px) * -1),var(--shif
 :root[data-ui-theme="light"] .pause-menu{background:rgba(255,255,255,.96)}
 .pause-menu.on{opacity:1;visibility:visible;pointer-events:auto;transition:opacity .16s ease}
 .pause-menu.versus #p-restart{display:none}
-/* .card's rest state is mid-slide-in, normally cleared by .veil.on — this
-   overlay is never a .veil, so it needs its own reset or the card sits
-   permanently offset off the left edge. */
-#game-over .card{transform:none}
-.card{
-  width:var(--col);margin-block:auto;padding-right:12px;
-  transform:translateX(-46px) scale(.99);
-  transition:transform .2s cubic-bezier(.2,.9,.25,1) .25s;
-}
-.veil.fwd .card{transform:translateX(46px) scale(.99);transition:none}
-.veil.on .card{transform:none;transition:transform .28s cubic-bezier(.2,.9,.25,1)}
-.veil.out .mi{
-  transform:translateX(-16px);opacity:0;
-  transition:transform .17s ease-in .25s,opacity .15s ease .25s;
-}
-.veil.out .mi:nth-child(2){transition-delay:.27s}
-.veil.out .mi:nth-child(3){transition-delay:.29s}
-.veil.out .mi:nth-child(4){transition-delay:.31s}
+.card{width:var(--col);margin-block:auto;padding-right:12px}
 
 .brand{
   font-weight:700;letter-spacing:-.01em;text-align:left;color:var(--fg);
@@ -491,8 +475,7 @@ html[lang=ko] .fold summary h3{letter-spacing:.02em}
 }
 
 @media (prefers-reduced-motion:reduce){
-  .veil,.veil .card,.mi,.mi::after{transition-duration:.01ms;transition-delay:0s}
-  .veil.fwd .card,.veil.out .mi{transition-duration:.01ms;transition-delay:0s}
+  .mi,.mi::after{transition-duration:.01ms;transition-delay:0s}
   .panel.on{animation-duration:.01ms}
   .fold summary h3::after{transition-duration:.01ms}
   .foldbody{transition-duration:.01ms}
@@ -3799,7 +3782,10 @@ const PARENT = {
   "#v-join":  "#v-lobby"
 };
 const NET_SCREENS = {"#v-host":1,"#v-join":1};
-const EXIT_MS=430;
+/* Screens no longer animate out, so nothing needs to wait for that to
+   finish before running — this just defers a tick so a caller's own DOM
+   change (closing every veil) commits first. */
+const EXIT_MS=0;
 function afterScreen(fn){ setTimeout(fn,EXIT_MS); }
 
 const UI = {
