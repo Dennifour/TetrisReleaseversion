@@ -889,7 +889,8 @@ const CFG = {
   padOn: store.get("padOn",true),
   speedDiff: store.get("speedDiff","normal"),   // easy | normal | hard
   lang:  store.get("lang", /^ko/i.test(navigator.language||"") ? "ko" : "en"),
-  name:  store.get("name","") || ("PLAYER"+rnd(900+100))
+  name:  store.get("name","") || ("PLAYER"+rnd(900+100)),
+  fullscreen: store.get("fullscreen",false)
 };
 store.del("shake");                 // read once into `bob` above, then done with
 ["round","fx"].forEach(k=>store.del(k));   // the corner switch and the drop trail are gone
@@ -2419,11 +2420,12 @@ function drawOpponent(opp,i,g){
 
   const nm=((opp&&opp.name)||T("opponent")).slice(0,12);
   const sz=Math.min(TS(0.42),b.w*0.115);
+  const nmY=b.y+b.h+sz*0.95;
   /* Under the score rule the standing is the score, so it rides on the name
      line — there is no garbage meter to read it off instead. */
   const race=!!(g&&g.clock);
-  textFit(nm,b.x,b.y-sz*0.45,sz,INK.faint,"left",600,sz*0.1,b.w*(race?0.56:1));
-  if(race) textFit(((opp&&opp.score)|0).toLocaleString(),b.x+b.w,b.y-sz*0.45,sz,INK.dim,"right",600,0,b.w*0.42);
+  textFit(nm,b.x,nmY,sz,INK.faint,"left",600,sz*0.1,b.w*(race?0.56:1));
+  if(race) textFit(((opp&&opp.score)|0).toLocaleString(),b.x+b.w,nmY,sz,INK.dim,"right",600,0,b.w*0.42);
 
   if(opp&&opp.dead){
     ctx.fillStyle="rgba(10,10,12,.86)"; ctx.fillRect(b.x,b.y,b.w,b.h);
@@ -2475,17 +2477,18 @@ function clock(g,rx,y,maxW,size){
 
 /* Held still: the digit changes, nothing about it moves or fades. Shared
    with the "start" text that follows it (drawStartText) — same dimming,
-   same size, so the countdown and the word after it read as one beat. */
-function drawStandby(label){
+   same centering, scaled down a bit since a whole word reads bigger than
+   a single digit at the same size. */
+function drawStandby(label,scale=1){
   ctx.fillStyle="rgba(10,10,12,.62)";
   ctx.fillRect(L.bx,L.by,L.bw,L.bh);
-  const sz=Math.min(L.cell*5,L.bw*0.8);
+  const sz=Math.min(L.cell*5,L.bw*0.8)*scale;
   textFit(label,L.bx+L.bw/2,L.by+L.bh/2+sz*0.36,sz,INK.fg,"center",600,sz*0.14,L.bw*0.9);
 }
 function drawCountdown(){ drawStandby(String(Math.ceil(COUNT))); }
 /* Static — no fade, no drift — and gone the instant startHoldEnd passes,
    which is also the instant the well starts ticking (see loop()). */
-function drawStartText(){ drawStandby(T("g_go")); }
+function drawStartText(){ drawStandby(T("g_go"),0.6); }
 
 function drawBanners(){
   const cx=L.bx+L.bw/2;
@@ -4529,28 +4532,38 @@ $("#pausebtn").addEventListener("click",e=>{ e.preventDefault(); e.stopPropagati
 $("#pausebtn").addEventListener("pointerdown",e=>e.stopPropagation());
 
 /* fullscreen — hidden on iPhone Safari, which has no element fullscreen.
-   A Settings toggle rather than a corner button; its "on" state mirrors
-   the real fullscreen element rather than a stored preference, since a
-   reload can't put the page back into fullscreen without a fresh user
-   gesture to ask for it. */
+   CFG.fullscreen is the saved preference; the live fullscreen element is
+   the truth once the page can act on it. A click on the toggle is itself
+   a user gesture, so it can ask for fullscreen right there — but a page
+   load can't, so a saved "on" instead waits for the very first gesture
+   anywhere on the page and asks then. */
 const fsEl =()=>document.fullscreenElement||document.webkitFullscreenElement||null;
 const fsCan=!!(document.documentElement.requestFullscreen||document.documentElement.webkitRequestFullscreen);
+function enterFs(){ try{ (document.documentElement.requestFullscreen||document.documentElement.webkitRequestFullscreen).call(document.documentElement); }catch(_){} }
+function exitFs(){ try{ (document.exitFullscreen||document.webkitExitFullscreen).call(document); }catch(_){} }
 
 if(fsCan){
   $("#full-row").hidden=false;
+  $("#s-full").classList.toggle("on",CFG.fullscreen);
   $("#s-full").addEventListener("click",()=>{
     Sfx.ui();
-    const d=document, el=d.documentElement;
-    try{
-      if(fsEl()) (d.exitFullscreen||d.webkitExitFullscreen).call(d);
-      else       (el.requestFullscreen||el.webkitRequestFullscreen).call(el);
-    }catch(_){}
+    CFG.fullscreen=!fsEl();
+    saveCfg();
+    if(fsEl()) exitFs(); else enterFs();
   });
   const syncFs=()=>{
-    $("#s-full").classList.toggle("on",!!fsEl());
+    CFG.fullscreen=!!fsEl();
+    saveCfg();
+    $("#s-full").classList.toggle("on",CFG.fullscreen);
     layout();
     setTimeout(layout,120);
   };
+  if(CFG.fullscreen && !fsEl()){
+    document.addEventListener("pointerdown",function tryFs(){
+      document.removeEventListener("pointerdown",tryFs);
+      if(CFG.fullscreen && !fsEl()) enterFs();
+    },{once:true});
+  }
   document.addEventListener("fullscreenchange",syncFs);
   document.addEventListener("webkitfullscreenchange",syncFs);
 }
