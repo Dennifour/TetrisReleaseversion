@@ -21,7 +21,7 @@ This repository is a single-file Tetris implementation: `Tetris_version1.html`. 
 
 ### Screen navigation (`.veil`/`.mi`)
 - Every non-gameplay screen (Home, Play, Speed, Records, Lobby, Host, Join, Room, Settings) is a `.veil` element shown/hidden by `UI.show(id)`/`UI.back()` (~line 3704), which cross-fades between screens and consults the `PARENT` map (~line 3691) for the back target; `afterScreen(fn)` (~line 3702, `EXIT_MS=430`) delays state cleanup (like nulling `G`) until a transition finishes.
-- Navigation and mode buttons use the `.mi` class: bare lowercase text, no border or fill at rest. A `::after` pseudo-element draws a single white pill (`border-radius:999px;border:1.5px solid #fff`, or `#000` in light mode) that fades/scales in on hover, focus, `:active`, or a `.on`/`.lit` state class — this is the only pill-chrome in the UI, intentionally sparse to match the reference design (bold text list, one highlighted item).
+- Navigation and mode buttons use the `.mi` class: bare lowercase text, no border or fill at rest. A `::after` pseudo-element draws a single white pill (`border-radius:999px;border:1.5px solid #fff`) that fades/scales in on hover, focus, `:active`, or a `.on`/`.lit` state class — this is the only pill-chrome in the UI, intentionally sparse to match the reference design (bold text list, one highlighted item).
 - The Room screen's player cards (`.seat-card`) are the deliberate exception to "no borders": they're a status display, not navigation, so they keep a 1px `var(--line)` border.
 
 ### Responsive list+panel split (`.split`)
@@ -45,8 +45,9 @@ Two connection paths, both peer-to-peer over WebRTC `RTCPeerConnection`/`DataCha
 
 ### Theming & visuals
 - `THEMES` (~line 769) and `NES_PALETTES` (~line 1301) define the in-game board's color/font sets; `applyTheme()`/`palFor(g)` select the active one. `CELLS`/`OUTLINE` (~line 1249/1292) precompute per-piece cell shapes and outlines via `traceOutline()`.
-- `CFG.uiTheme` (~line 776: `light`/`dark`/`system`) and `applyUiTheme()` (~line 840) independently control the *page's* light/dark mode via a `data-ui-theme` attribute on `<html>`, driving the `--bg`/`--surface`/`--fg` custom properties — separate from `THEMES`, which only affects the canvas. Settings → Video exposes this as Light/Dark/System pills.
+- The page chrome is dark-only — there is no light/system mode toggle. `--bg`/`--surface`/`--fg` etc. are plain `:root` custom properties; `THEMES` only affects the canvas.
 - `#bg` is a fixed-position backdrop layer separate from the canvas; see the CSS comments near the top of the file for why it uses `isolation: isolate` and a negative `z-index`.
+- `GrainientBG` (~line "8 · GRAINIENT BACKGROUND", a WebGL2 port of React Bits' Grainient shader) animates `#grainient-bg`, another fixed backdrop layer sitting behind `#bg`, visible only on the menu veils. `UI.show()` calls `GrainientBG.setActive()` to fade it out the instant a run starts and back in when returning to a menu, so it never overlaps live gameplay. Tunables live in `GRAINIENT_COLORS`/`GRAINIENT_CFG` near the top of that section.
 
 ### Internationalization
 - `LANGS = ["en","ko"]` with all strings in `I18N` (~line 903), keyed by string id with `[en, ko]` tuples. `T(key, vars)` (~line 1121) looks up the current-language string with variable interpolation (falling back to the key itself if missing); `EN(key, vars)` (~line 1131) is an English-pinned variant used for banners that shouldn't localize. `applyLang()` (~line 1138) re-renders all `[data-i18n]` elements and re-invokes `UI.renderRecords()`/`renderRoom()`/`openTab()` so dynamically-built screens pick up the new language. Add new strings to `I18N` with both languages, not just a default.

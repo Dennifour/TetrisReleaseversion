@@ -22,20 +22,6 @@
   --danger:#e5484d;
   --radius:4px;
 }
-/* Light mode swaps every token above; nothing downstream reads a raw
-   colour, so this is the only place "light" is ever spelled out. */
-:root[data-ui-theme="light"]{
-  --bg:#ffffff;
-  --surface:#f6f6f7;
-  --surface-2:#eeeef0;
-  --line:rgba(0,0,0,.11);
-  --line-strong:rgba(0,0,0,.22);
-  --fg:#0b0b0d;
-  --fg-dim:#55555d;
-  --fg-faint:#83838b;
-  --accent:#0b0b0d;
-  --danger:#c8272f;
-}
 
 *,*::before,*::after{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;height:100%;height:100dvh;overflow:hidden;overscroll-behavior:none}
@@ -193,8 +179,8 @@ body.swap #act-wrap{transform:translate(calc(var(--shift-x,0px) * -1),var(--shif
      behind the keyboard. */
   height:var(--vvh,100dvh);
   padding:calc(env(safe-area-inset-top) + 16px) var(--edge) 16px;
-  background:rgba(10,10,12,.82);
-  backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px);
+  background:rgba(10,10,12,.74);
+  backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
   overflow:hidden auto;overscroll-behavior:contain;touch-action:pan-y;
   opacity:0;visibility:hidden;pointer-events:none;
   /* Matches EXIT_MS: the fade-out finishes exactly as UI.show() moves on
@@ -202,7 +188,6 @@ body.swap #act-wrap{transform:translate(calc(var(--shift-x,0px) * -1),var(--shif
      without cutting the animation short. */
   transition:opacity .1s ease,visibility 0s .1s;
 }
-:root[data-ui-theme="light"] .veil{background:rgba(255,255,255,.88)}
 .veil.on{opacity:1;visibility:visible;pointer-events:auto;transition:opacity .15s ease}
 
 /* The in-game pause overlay is deliberately not a .veil: it sits above live
@@ -223,7 +208,6 @@ body.swap #act-wrap{transform:translate(calc(var(--shift-x,0px) * -1),var(--shif
   opacity:0;visibility:hidden;pointer-events:none;
   transition:opacity .16s ease,visibility 0s .16s;
 }
-:root[data-ui-theme="light"] .pause-menu{background:rgba(255,255,255,.96)}
 .pause-menu.on{opacity:1;visibility:visible;pointer-events:auto;transition:opacity .16s ease}
 .pause-menu.versus #p-restart{display:none}
 .card{width:var(--col);margin-block:auto;padding-right:12px}
@@ -266,7 +250,6 @@ h3:first-of-type{margin-top:4px}
   border:1.5px solid #fff;pointer-events:none;
   opacity:0;transform:scale(.94);
 }
-:root[data-ui-theme="light"] .mi::after{border-color:#000}
 .mi:focus-visible,.mi.on,.mi:active,.mi.lit{ outline:none; }
 /* The transition lives only on the "on" state, not the rest state above:
    fading in still animates, but losing hover/focus snaps the pill away
@@ -744,12 +727,6 @@ html[lang=ko] .fold summary h3{letter-spacing:.02em}
         </section>
 
         <section class="panel" data-panel="video" role="tabpanel">
-          <h3 data-i18n="set_appearance"></h3>
-          <div class="row">
-            <button class="mi ctr uitheme" type="button" data-uitheme="light" data-i18n="set_light"></button>
-            <button class="mi ctr uitheme" type="button" data-uitheme="dark" data-i18n="set_dark"></button>
-            <button class="mi ctr uitheme" type="button" data-uitheme="system" data-i18n="set_system"></button>
-          </div>
           <h3 data-i18n="set_pres"></h3>
           <div class="opts">
             <div class="sp" id="full-row" hidden><span data-i18n="set_full"></span><div class="sw" id="s-full"></div></div>
@@ -892,7 +869,6 @@ const CFG = {
   ghost: store.get("ghost",true),
   grid:  store.get("grid",false),       // the well's cell grid
   theme: store.get("theme","default"),
-  uiTheme: store.get("uiTheme","dark"),   // light | dark | system — page chrome, not the board's own THEME
   bgBright: store.get("bgBright",45),   // % opacity the active theme's background shows at
   swap:  store.get("swap",false),
   btnScale: store.get("btnScale",1),
@@ -914,6 +890,7 @@ const CFG = {
   fullscreen: store.get("fullscreen",false)
 };
 store.del("shake");                 // read once into `bob` above, then done with
+store.del("uiTheme");               // light/dark/system toggle is gone; the app is dark-only now
 ["round","fx"].forEach(k=>store.del(k));   // the corner switch and the drop trail are gone
 store.del("clearfx");               // the line-clear effects it picked between are gone
 store.del("skin");                  // folded into the theme it was one field of
@@ -931,37 +908,16 @@ let CANVAS_FONT = THEME.font;
 function applyTheme(){
   THEME = THEMES.find(t=>t.id===CFG.theme) || THEMES[0];
   CANVAS_FONT = THEME.font;
-  const light = resolvedUiTheme()==="light";
-  INK.frame = light ? INK_LIGHT.frame : THEME.boardColor;
-  INK.fg    = light ? INK_LIGHT.fg    : THEME.textColor;
-  INK.dim   = light ? INK_LIGHT.dim   : rgba(THEME.textColor,.82);
-  INK.faint = light ? INK_LIGHT.faint : rgba(THEME.textColor,.65);
-  INK.bg    = light ? INK_LIGHT.bg    : INK_DARK.bg;
-  INK.well  = light ? INK_LIGHT.well  : INK_DARK.well;
-  INK.grid  = light ? INK_LIGHT.grid  : INK_DARK.grid;
-  INK.line  = light ? INK_LIGHT.line  : INK_DARK.line;
-  INK.danger= light ? INK_LIGHT.danger: INK_DARK.danger;
-  GHOST_INK = light ? INK_LIGHT.ghost : INK_DARK.ghost;
+  INK.frame = THEME.boardColor;
+  INK.fg    = THEME.textColor;
+  INK.dim   = rgba(THEME.textColor,.82);
+  INK.faint = rgba(THEME.textColor,.65);
   applyBg();
 }
 function applyBg(){
   $("#bg").style.backgroundImage = THEME.background ? "url("+THEME.background+")" : "none";
   document.documentElement.style.setProperty("--bg-bright", CFG.bgBright/100);
 }
-
-/* The page's own light/dark, independent of the board's THEME above — kept
-   working even with nothing on screen to switch it from yet. "system" is
-   resolved against the OS preference and kept in sync with it. */
-const PREFERS_LIGHT = matchMedia("(prefers-color-scheme: light)");
-const resolvedUiTheme = () => CFG.uiTheme==="system" ? (PREFERS_LIGHT.matches?"light":"dark") : CFG.uiTheme;
-function applyUiTheme(){
-  const resolved = resolvedUiTheme();
-  document.documentElement.setAttribute("data-ui-theme",resolved);
-  const mc=$('meta[name="theme-color"]');
-  if(mc) mc.content = resolved==="light" ? "#ffffff" : "#05060f";
-}
-PREFERS_LIGHT.addEventListener("change",()=>{ if(CFG.uiTheme==="system"){ applyUiTheme(); applyTheme(); } });
-applyUiTheme();
 
 /* Personal bests, kept on this device only. Marathon counts every run, since
    topping out is how it ends; sprint only counts a finished 40. */
@@ -1170,7 +1126,6 @@ const I18N = {
   rule_locked:["The host picks it.","방장이 정합니다."],
   rule_score:["HIGH SCORE","점수전"],
   rule_score_s:["Three minutes, nothing sent across. The highest score wins.","3분 동안 방해 줄 없이 겨루고, 점수가 가장 높은 사람이 승리합니다."],
-  set_appearance:["Appearance","외관"],
   set_arr:["ARR — auto-shift repeat","ARR — 자동 이동 간격"],
   set_bg:["Background","배경"],
   set_bg_bright:["Brightness","밝기"],
@@ -1181,7 +1136,6 @@ const I18N = {
   set_btnx:["Spread","좌우 간격"],
   set_btny:["Vertical position","세로 위치"],
   set_ctlreset:["RESET CONTROLS","컨트롤 초기화"],
-  set_dark:["Dark","다크"],
   set_das:["DAS — delay before auto-shift","DAS — 자동 이동 시작 지연"],
   set_dpad:["D-PAD","D패드"],
   set_dpad_s:["On-screen d-pad and buttons below or beside the well.","화면에 D패드와 버튼이 표시됩니다."],
@@ -1192,7 +1146,6 @@ const I18N = {
   set_id:["Identity","이름"],
   set_id_hint:["Shown to your opponent once you connect.","연결하면 상대에게 표시됩니다."],
   set_lang:["Language","언어"],
-  set_light:["Light","라이트"],
   set_off:["OFF","끄기"],
   set_off_s:["No on-screen controls. Play with the keyboard or a gamepad.","화면 조작을 사용하지 않습니다. 키보드나 게임패드로 플레이하세요."],
   set_padbind_hint:["Tap a row, then press the button. Defaults follow where TETRIS 99 puts each action on the pad.","항목을 누른 뒤 버튼을 누르세요. 기본값은 TETRIS 99의 버튼 배치를 따릅니다."],
@@ -1214,7 +1167,6 @@ const I18N = {
   set_swipe_s:["No buttons: drag sideways to move, drag down to soft drop, flick down to hard drop, drag up to hold, tap to rotate.","버튼 없이 조작합니다. 좌우로 끌면 이동, 아래로 끌면 소프트 드롭, 아래로 튕기면 하드 드롭, 위로 끌면 홀드, 탭하면 회전."],
   set_swmove:["Drag to move one cell","한 칸 이동 거리"],
   set_swreset:["RESET SENSITIVITY","감도 초기화"],
-  set_system:["System","시스템"],
   set_vol:["Volume","음량"],
   sp_easy:["EASY","쉬움"],
   sp_hard:["HARD","어려움"],
@@ -1965,18 +1917,6 @@ const INK = {
   fg:"#ededf0", dim:"#c4c4cc", faint:"#9a9aa5",
   danger:"#ff5a5f"
 };
-/* The two resolved-ui-theme ends of INK's range — applyTheme() picks between
-   them (mirroring the light tokens in :root[data-ui-theme="light"] above),
-   so the well, its outline, the HUD text and the ghost piece all invert
-   along with the page chrome instead of staying dark-mode-only. */
-const INK_DARK = { ...INK, ghost:"#ffffff" };
-const INK_LIGHT = {
-  bg:"#ffffff", well:"#eeeef0", grid:"rgba(0,0,0,.20)",
-  line:"rgba(0,0,0,.20)", frame:"#0b0b0d",
-  fg:"#0b0b0d", dim:"#55555d", faint:"#83838b",
-  danger:"#c8272f", ghost:"#0b0b0d"
-};
-
 /* Short of opaque, so a custom background tints through the stack itself
    rather than only the space around it. */
 const WELL_A = 0.7;
@@ -2022,11 +1962,8 @@ function block(x,y,s,type,alpha=1){
    board a theme never dresses: given the piece's own ink it would compete
    with the stack it's measured against, and unlike the board outline it
    can't just borrow the theme's colour — a theme is free to make that the
-   same colour as the well fills with, which this can never afford to. It
-   does still flip with the page's light/dark chrome (set in applyTheme(),
-   from INK_DARK/LIGHT), since that's what the well itself is drawn in —
-   and what .mi::after itself flips to in light mode. */
-let GHOST_INK = "#ffffff";
+   same colour as the well fills with, which this can never afford to. */
+const GHOST_INK = "#ffffff";
 function pieceOutline(type,r,px,py,bx,by,cell,alpha,width){
   const ox=bx+px*cell, oy=by+(py-BUFFER)*cell;
   ctx.save();
@@ -3739,12 +3676,16 @@ const Net = {
 /* 8 · GRAINIENT BACKGROUND — animated WebGL wash behind the menu veils,
    ported from React Bits' Grainient (ogl/React) to plain WebGL2 since this
    file has no build step or framework; the shader itself is unchanged. */
-const GRAINIENT_COLORS = ["#6a5ea8","#1c1830","#07070c"];
+const GRAINIENT_COLORS = ["#8a72ff","#241c40","#050508"];
 const GRAINIENT_CFG = {
-  timeSpeed:0.12, colorBalance:0.1, warpStrength:1.0, warpFrequency:3.2,
-  warpSpeed:0.6, warpAmplitude:40.0, blendAngle:25.0, blendSoftness:0.35,
-  rotationAmount:220.0, noiseScale:1.2, grainAmount:0.06, grainScale:2.5,
-  contrast:1.4, gamma:1.0, saturation:0.85, zoom:1.15
+  timeSpeed:0.14, colorBalance:0.1, warpStrength:1.1, warpFrequency:3.4,
+  warpSpeed:0.7, warpAmplitude:55.0, blendSoftness:0.35,
+  // 155 deg mirrors the shader's natural top-left-bright diagonal so the
+  // bright edge lands top-right instead — see GrainientBG's setup().
+  blendAngle:155.0,
+  rotationAmount:220.0, noiseScale:1.2, grainAmount:0.09, grainScale:2.5,
+  contrast:1.6, gamma:1.0, saturation:1.05, zoom:1.15,
+  centerX:0.0, centerY:0.0
 };
 const GrainientBG = (()=>{
   const VERT = `#version 300 es
@@ -3887,7 +3828,7 @@ void main(){
     gl.uniform1f(u.uContrast,GRAINIENT_CFG.contrast);
     gl.uniform1f(u.uGamma,GRAINIENT_CFG.gamma);
     gl.uniform1f(u.uSaturation,GRAINIENT_CFG.saturation);
-    gl.uniform2f(u.uCenterOffset,0,0);
+    gl.uniform2f(u.uCenterOffset,GRAINIENT_CFG.centerX,GRAINIENT_CFG.centerY);
     gl.uniform1f(u.uZoom,GRAINIENT_CFG.zoom);
     const [c1,c2,c3]=GRAINIENT_COLORS.map(hexToRgb);
     gl.uniform3f(u.uColor1,c1[0],c1[1],c1[2]);
@@ -4311,7 +4252,7 @@ const UI = {
     $$("#set-rail [data-tab]").forEach(b=>b.classList.toggle("on",b.dataset.tab===name));
     $$("#v-set .panel").forEach(p=>p.classList.toggle("on",p.dataset.panel===name));
     if(name==="controls"){ repaintSettings(); paintTouch(); bindRows("#keylist","keys"); bindRows("#padlist","pads"); paintPad(); }
-    if(name==="video"){ paintBg(); paintUiTheme(); }
+    if(name==="video"){ paintBg(); }
     if(name==="audio") repaintSettings();
   },
 
@@ -4555,17 +4496,6 @@ function bindRows(host,which){
     if(which==="keys") BINDING=done; else Pad.watching=done;
   });
 }
-
-$$(".uitheme").forEach(b=>b.onclick=()=>{
-  if(CFG.uiTheme===b.dataset.uitheme) return;
-  Sfx.ui();
-  CFG.uiTheme=b.dataset.uitheme; saveCfg();
-  applyUiTheme(); applyTheme(); paintUiTheme();
-});
-function paintUiTheme(){
-  $$(".uitheme").forEach(b=>b.classList.toggle("on",b.dataset.uitheme===CFG.uiTheme));
-}
-paintUiTheme();
 
 function paintBg(){
   const on=!!THEME.background;
