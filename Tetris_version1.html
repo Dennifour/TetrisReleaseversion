@@ -1408,19 +1408,34 @@ const PIECE_COLOR = {
   I:"#00e0e8", O:"#f0d000", T:"#a000e0", S:"#00c000",
   Z:"#e02020", J:"#2040e0", L:"#f09000", G:"#4a4a4a"
 };
-/* A small tileable speckle, drawn once into an offscreen canvas and reused
-   as a CanvasPattern on every filled cell — real repeating grain rather
-   than a flat swatch standing in for one, and cheap since the tile itself
-   is built once here rather than redrawn per cell per frame. */
-const BLOCK_TEX = (()=>{
-  const n=16, c=document.createElement("canvas");
-  c.width=c.height=n;
-  const tc=c.getContext("2d");
-  for(let i=0;i<28;i++){
-    tc.fillStyle = Math.random()<0.5 ? "rgba(255,255,255,.16)" : "rgba(0,0,0,.12)";
-    tc.fillRect(Math.random()*n,Math.random()*n,1.5,1.5);
+/* The glossy, beveled block every Tetris skin from the NES ports on has
+   used: a flat fill lit from the top-left — bright sheen fading through
+   the face to a shadow at the bottom-right corner — plus a small brighter
+   highlight let into the top-left, like light catching a plastic tile.
+   One tile per colour is pre-rendered into an offscreen canvas here, once,
+   or the frame drawing every cell would each be building its own
+   gradient — block() below just scales the finished tile onto the well
+   with drawImage, which is cheap regardless of how many cells it repaints. */
+const BLOCK_TILE = {};
+(function(){
+  const n=48;
+  for(const t in PIECE_COLOR){
+    const c=document.createElement("canvas");
+    c.width=c.height=n;
+    const tc=c.getContext("2d");
+    tc.fillStyle=PIECE_COLOR[t];
+    tc.fillRect(0,0,n,n);
+    const grad=tc.createLinearGradient(0,0,n,n);
+    grad.addColorStop(0,"rgba(255,255,255,.55)");
+    grad.addColorStop(0.22,"rgba(255,255,255,.14)");
+    grad.addColorStop(0.55,"rgba(255,255,255,0)");
+    grad.addColorStop(1,"rgba(0,0,0,.38)");
+    tc.fillStyle=grad;
+    tc.fillRect(0,0,n,n);
+    tc.fillStyle="rgba(255,255,255,.4)";
+    tc.fillRect(n*0.14,n*0.14,n*0.32,n*0.15);
+    BLOCK_TILE[t]=c;
   }
-  return tc.createPattern(c,"repeat");
 })();
 
 /* 3 · GAME CORE */
@@ -1988,17 +2003,14 @@ function label(txt,x,y,maxW){
   const sz=maxW?Math.min(TS(0.5),maxW*0.21):TS(0.5);
   textFit(txt,x,y,sz,INK.faint,"left",600,sz*0.13,maxW||1e5);
 }
-/* Flat colour, full cell, edge to edge — no inset, so no seam opens up
-   between a tile and its neighbours — with the speckle pattern laid over
-   it so a fill still reads as a textured block rather than a plain
-   swatch. Square corners: a rounded pixel is the one thing that would
-   look wrong here. */
+/* The pre-rendered tile scaled straight onto the cell's own box — full
+   cell, edge to edge, no inset — so no seam opens up between a tile and
+   its neighbours. drawImage always covers its destination rectangle
+   exactly regardless of image smoothing, so the gloss inside a tile can
+   be as soft as it likes without ever leaving a gap at the edge. */
 function block(x,y,s,type,alpha=1){
   ctx.globalAlpha=alpha;
-  ctx.fillStyle=PIECE_COLOR[type]||PIECE_COLOR.G;
-  ctx.fillRect(x,y,s,s);
-  ctx.fillStyle=BLOCK_TEX;
-  ctx.fillRect(x,y,s,s);
+  ctx.drawImage(BLOCK_TILE[type]||BLOCK_TILE.G,x,y,s,s);
   ctx.globalAlpha=1;
 }
 
