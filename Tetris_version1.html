@@ -359,13 +359,13 @@ input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;bac
 }
 @media (min-width:760px){
   #v-set .card,#v-lobby .card{width:min(760px,100%)}
-  .split{display:grid;grid-template-columns:180px 1fr;gap:8px 40px;align-items:start}
-  #v-set .card{width:min(900px,100%);margin-block:auto}
-  #v-set .split,#v-lobby .split{
-    grid-template-columns:280px 1fr;align-items:center;
+  .split{
+    display:grid;grid-template-columns:180px 1fr;gap:8px 40px;align-items:center;
     height:min(620px,calc(100vh - 160px));overflow:hidden;
   }
-  #v-set .panel-area,#v-lobby .panel-area{height:100%;overflow-y:auto}
+  .split .panel-area{height:100%;overflow-y:auto}
+  #v-set .card{width:min(900px,100%);margin-block:auto}
+  #v-set .split{grid-template-columns:280px 1fr}
 }
 
 .panel{display:none}
@@ -563,22 +563,22 @@ html[lang=ko] .fold summary h3{letter-spacing:.02em}
     <div class="split" id="lobby-split">
       <button class="mi ghost panel-back" type="button" id="lobby-panelback">&larr; <span data-i18n="lob_t"></span></button>
       <div class="menu rail" id="lobby-rail">
-        <button class="mi nav on" data-panel="server"><span data-i18n="lob_server"></span></button>
-        <button class="mi nav" data-panel="p2p"><span data-i18n="lob_p2p"></span></button>
+        <button class="mi on" data-panel="server"><span data-i18n="lob_server"></span></button>
+        <button class="mi" data-panel="p2p"><span data-i18n="lob_p2p"></span></button>
         <button class="mi nav ghost mt16" data-back="1" data-i18n="back"></button>
       </div>
       <div class="panel-area">
         <section class="panel on" data-panel="server">
           <h3 data-i18n="srv_list"></h3>
           <div id="on-list"></div>
-          <div class="menu mt16"><button class="mi nav" id="b-mkroom"><span data-i18n="srv_make"></span></button></div>
+          <div class="menu mt16"><button class="mi" id="b-mkroom"><span data-i18n="srv_make"></span></button></div>
           <p class="hint" id="srv-hint"></p>
         </section>
         <section class="panel" data-panel="p2p">
           <p class="tag" data-i18n="net_tag"></p>
           <div class="menu">
-            <button class="mi nav" data-go="host"><span data-i18n="lob_host"></span></button>
-            <button class="mi nav" data-go="join"><span data-i18n="lob_join"></span></button>
+            <button class="mi" data-go="host"><span data-i18n="lob_host"></span></button>
+            <button class="mi" data-go="join"><span data-i18n="lob_join"></span></button>
           </div>
         </section>
       </div>
