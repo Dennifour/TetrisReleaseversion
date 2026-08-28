@@ -344,8 +344,12 @@ input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;bac
 @media (min-width:760px){
   #v-set .card,#v-lobby .card{width:min(760px,100%)}
   .split{display:grid;grid-template-columns:180px 1fr;gap:8px 40px;align-items:start}
-  #v-set .card{width:min(900px,100%);margin-block:0}
-  #v-set .split{grid-template-columns:280px 1fr}
+  #v-set .card{width:min(900px,100%);margin-block:auto}
+  #v-set .split{
+    grid-template-columns:280px 1fr;align-items:center;
+    height:min(620px,calc(100vh - 160px));overflow:hidden;
+  }
+  #v-set .panel-area{height:100%;overflow-y:auto}
 }
 
 .panel{display:none}
