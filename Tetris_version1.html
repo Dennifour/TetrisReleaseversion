@@ -172,10 +172,12 @@ body.swap #act-wrap{transform:translate(calc(var(--shift-x,0px) * -1),var(--shif
 
 /* --- screens --- */
 /* Screens switch on visibility rather than display, so the canvas
-   underneath keeps painting — but the switch itself is instant, no
-   cross-fade, so menu navigation never leaves a blank gap between
-   screens. Nothing is panelled: a screen is a page, read against one
-   column. */
+   underneath keeps painting. A screen leaving fades out over EXIT_MS
+   (UI.show() holds the next one back until that beat is up), then the
+   next one fades in on its own — sequential, not an overlapping
+   cross-fade, so there's never a moment with two screens' worth of
+   text stacked on top of each other. Nothing is panelled: a screen is
+   a page, read against one column. */
 .veil{
   --edge:max(16px,5vw);
   --col:min(460px,100%);
@@ -190,9 +192,13 @@ body.swap #act-wrap{transform:translate(calc(var(--shift-x,0px) * -1),var(--shif
   background:rgba(10,10,12,.94);
   overflow:hidden auto;overscroll-behavior:contain;touch-action:pan-y;
   opacity:0;visibility:hidden;pointer-events:none;
+  /* Matches EXIT_MS: the fade-out finishes exactly as UI.show() moves on
+     to the next screen, so visibility can flip to hidden right behind it
+     without cutting the animation short. */
+  transition:opacity .1s ease,visibility 0s .1s;
 }
 :root[data-ui-theme="light"] .veil{background:rgba(255,255,255,.96)}
-.veil.on{opacity:1;visibility:visible;pointer-events:auto}
+.veil.on{opacity:1;visibility:visible;pointer-events:auto;transition:opacity .15s ease}
 
 /* The in-game pause overlay is deliberately not a .veil: it sits above live
    gameplay rather than replacing a screen, so it stays out of UI.show()'s
@@ -498,7 +504,7 @@ html[lang=ko] .fold summary h3{letter-spacing:.02em}
 }
 
 @media (prefers-reduced-motion:reduce){
-  .mi,.mi::after{transition-duration:.01ms;transition-delay:0s}
+  .veil,.mi,.mi::after{transition-duration:.01ms;transition-delay:0s}
   .panel.on{animation-duration:.01ms}
   .fold summary h3::after{transition-duration:.01ms}
   .foldbody{transition-duration:.01ms}
