@@ -864,7 +864,7 @@ const store = {
 const THEMES = [
   { id:"default", background:null,
     font:"ui-sans-serif,system-ui,-apple-system,\"Segoe UI\",Roboto,sans-serif",
-    skin:"nes", lineClearFx:"dissolve", boardColor:"#ffffff",
+    skin:"classic", lineClearFx:"dissolve", boardColor:"#ffffff",
     textColor:"#ededf0", soundFx:"default" },
 ];
 
@@ -1400,48 +1400,28 @@ function traceOutline(cells){
 const OUTLINE = {};
 for(const t of TYPES) OUTLINE[t]=CELLS[t].map(traceOutline);
 
-/* The NES skin has no per-piece colour. A level dresses the whole well in
-   three tiles, and every piece is one of the three — so the ten palettes
-   below are the skin, and the piece only picks a slot in whichever is up.
-   Each row is [white, first colour, second colour], converted from the NES
-   palette indices the original addressed them by, kept in the comment so a
-   colour can be checked against the hardware rather than against taste. */
-const NES_PALETTES = [
-  ["#fcfcfc","#3cbcfc","#0058f8"],   // 30 21 12
-  ["#fcfcfc","#b8f818","#00a800"],   // 30 29 1A
-  ["#fcfcfc","#f878f8","#d800cc"],   // 30 24 14
-  ["#fcfcfc","#58d854","#0058f8"],   // 30 2A 12
-  ["#fcfcfc","#58f898","#e40058"],   // 30 2B 15
-  ["#fcfcfc","#6888fc","#58f898"],   // 30 22 2B
-  ["#fcfcfc","#7c7c7c","#f83800"],   // 30 00 16
-  ["#fcfcfc","#a80020","#6844fc"],   // 30 05 13
-  ["#fcfcfc","#f83800","#0058f8"],   // 30 16 12
-  ["#fcfcfc","#fca044","#f83800"]    // 30 27 16
-];
-/* Which slot a piece takes. The three pieces that are their own mirror take
-   the pale tile; the other four pair up across the mirror pairs rather than
-   along them — L with Z, and J with S. There is no rule behind that to
-   re-derive, so the table is the fact. Do not "correct" it into J with L and
-   S with Z: that is the tidy version, and it is not the one on the cartridge. */
-const NES_SLOT = {T:0,O:0,I:0, L:1,Z:1, J:2,S:2, G:3};
-/* Darker than any palette colour, and the one tile drawn without a highlight:
-   a level whose own colour is grey (there is one) would otherwise make a row
-   you were given look like a row you placed. */
-const NES_GARBAGE = "#4a4a4a";
-
-/* The palette this frame is drawn in. Set once per frame from the run, so
-   nothing that draws a tile has to be handed the game to find out. */
-let PAL = NES_PALETTES[0];
-/* The one mode whose palette climbs with the level. Every other mode draws
-   one at the start and keeps it, so a sprint, a match or a speed run is one
-   set of colours from beginning to end — speed has levels, but it is not
-   what the run is about, and a palette changing under a five-second clock
-   reads as a fault rather than as progress. */
-const PAL_BY_LEVEL = {solo:1};
-let PAL_PICK = 0;
-const palFor = g => NES_PALETTES[ PAL_BY_LEVEL[g.mode]
-  ? (g.level-1) % NES_PALETTES.length
-  : PAL_PICK ];
+/* Classic guideline colours: one fixed colour per piece type rather than a
+   shared, level-cycling three-tile skin — I is always cyan, O always
+   yellow, and so on, for the whole run. Garbage stays a neutral grey so a
+   row you were given never reads as a row you placed. */
+const PIECE_COLOR = {
+  I:"#00e0e8", O:"#f0d000", T:"#a000e0", S:"#00c000",
+  Z:"#e02020", J:"#2040e0", L:"#f09000", G:"#4a4a4a"
+};
+/* A small tileable speckle, drawn once into an offscreen canvas and reused
+   as a CanvasPattern on every filled cell — real repeating grain rather
+   than a flat swatch standing in for one, and cheap since the tile itself
+   is built once here rather than redrawn per cell per frame. */
+const BLOCK_TEX = (()=>{
+  const n=16, c=document.createElement("canvas");
+  c.width=c.height=n;
+  const tc=c.getContext("2d");
+  for(let i=0;i<28;i++){
+    tc.fillStyle = Math.random()<0.5 ? "rgba(255,255,255,.16)" : "rgba(0,0,0,.12)";
+    tc.fillRect(Math.random()*n,Math.random()*n,1.5,1.5);
+  }
+  return tc.createPattern(c,"repeat");
+})();
 
 /* 3 · GAME CORE */
 const COLS=10, VIS_ROWS=20, BUFFER=2, ROWS=VIS_ROWS+BUFFER;
@@ -2008,29 +1988,17 @@ function label(txt,x,y,maxW){
   const sz=maxW?Math.min(TS(0.5),maxW*0.21):TS(0.5);
   textFit(txt,x,y,sz,INK.faint,"left",600,sz*0.13,maxW||1e5);
 }
-/* The three NES tiles, laid out on the eight-unit grid the originals were
-   drawn on. All three are solid: the pale one is a coloured frame with white
-   inside it, not a hole — the white is as much the block as the colour is.
-   The two filled ones carry a white bracket down their top-left corner, and
-   the frame of the pale one is the same colour as the darker filled one, so a
-   level reads as two colours rather than three. Square corners: a rounded
-   pixel is the one thing that would give the era away. */
+/* Flat colour, full cell, edge to edge — no inset, so no seam opens up
+   between a tile and its neighbours — with the speckle pattern laid over
+   it so a fill still reads as a textured block rather than a plain
+   swatch. Square corners: a rounded pixel is the one thing that would
+   look wrong here. */
 function block(x,y,s,type,alpha=1){
-  const p=Math.max(0.5,s*0.075), w=s-p*2, u=w/8, bx=x+p, by=y+p;
-  const slot=NES_SLOT[type];
   ctx.globalAlpha=alpha;
-  if(type==="G"){
-    ctx.fillStyle=NES_GARBAGE; ctx.fillRect(bx,by,w,w);
-  }else if(slot===0){
-    ctx.fillStyle=PAL[2]; ctx.fillRect(bx,by,w,w);
-    ctx.fillStyle=PAL[0]; ctx.fillRect(bx+u,by+u,w-u*2,w-u*2);
-    ctx.fillRect(bx,by,u,u);                  // and the pixel that sits outside the frame
-  }else{
-    ctx.fillStyle=PAL[slot]; ctx.fillRect(bx,by,w,w);
-    ctx.fillStyle=PAL[0];
-    ctx.fillRect(bx+u,by+u,u*2,u);            // along the top…
-    ctx.fillRect(bx+u,by+u,u,u*2);            // …and down the left
-  }
+  ctx.fillStyle=PIECE_COLOR[type]||PIECE_COLOR.G;
+  ctx.fillRect(x,y,s,s);
+  ctx.fillStyle=BLOCK_TEX;
+  ctx.fillRect(x,y,s,s);
   ctx.globalAlpha=1;
 }
 
@@ -2206,7 +2174,6 @@ function render(g, opp){
   }
   const foes=g.mode==="versus"?Math.min(3,(opp||[]).length):0;
   if(TWIN!==foes){ TWIN=foes; computeLayout(); }
-  PAL=palFor(g);
   ctx.setTransform(1,0,0,1,0,0);
   /* Cleared rather than filled: INK.bg is exactly the page's own --bg, so a
      transparent canvas over it looks identical with no custom background set,
@@ -2849,7 +2816,6 @@ function startMatch(){
 let rafId=0, lastT=0, sendAcc=0;
 
 function startGame(mode){
-  PAL_PICK=rnd(NES_PALETTES.length);     // sprint and versus keep this one throughout
   G=new Game(mode);
   COUNT=3; countEnd=now()+3000; startHoldEnd=0;
   if(mode==="versus"){
