@@ -876,10 +876,17 @@ let CANVAS_FONT = THEME.font;
 function applyTheme(){
   THEME = THEMES.find(t=>t.id===CFG.theme) || THEMES[0];
   CANVAS_FONT = THEME.font;
-  INK.frame = THEME.boardColor;
-  INK.fg = THEME.textColor;
-  INK.dim = rgba(THEME.textColor,.82);
-  INK.faint = rgba(THEME.textColor,.65);
+  const light = resolvedUiTheme()==="light";
+  INK.frame = light ? INK_LIGHT.frame : THEME.boardColor;
+  INK.fg    = light ? INK_LIGHT.fg    : THEME.textColor;
+  INK.dim   = light ? INK_LIGHT.dim   : rgba(THEME.textColor,.82);
+  INK.faint = light ? INK_LIGHT.faint : rgba(THEME.textColor,.65);
+  INK.bg    = light ? INK_LIGHT.bg    : INK_DARK.bg;
+  INK.well  = light ? INK_LIGHT.well  : INK_DARK.well;
+  INK.grid  = light ? INK_LIGHT.grid  : INK_DARK.grid;
+  INK.line  = light ? INK_LIGHT.line  : INK_DARK.line;
+  INK.danger= light ? INK_LIGHT.danger: INK_DARK.danger;
+  GHOST_INK = light ? INK_LIGHT.ghost : INK_DARK.ghost;
   applyBg();
 }
 function applyBg(){
@@ -891,13 +898,14 @@ function applyBg(){
    working even with nothing on screen to switch it from yet. "system" is
    resolved against the OS preference and kept in sync with it. */
 const PREFERS_LIGHT = matchMedia("(prefers-color-scheme: light)");
+const resolvedUiTheme = () => CFG.uiTheme==="system" ? (PREFERS_LIGHT.matches?"light":"dark") : CFG.uiTheme;
 function applyUiTheme(){
-  const resolved = CFG.uiTheme==="system" ? (PREFERS_LIGHT.matches?"light":"dark") : CFG.uiTheme;
+  const resolved = resolvedUiTheme();
   document.documentElement.setAttribute("data-ui-theme",resolved);
   const mc=$('meta[name="theme-color"]');
   if(mc) mc.content = resolved==="light" ? "#ffffff" : "#05060f";
 }
-PREFERS_LIGHT.addEventListener("change",()=>{ if(CFG.uiTheme==="system") applyUiTheme(); });
+PREFERS_LIGHT.addEventListener("change",()=>{ if(CFG.uiTheme==="system"){ applyUiTheme(); applyTheme(); } });
 applyUiTheme();
 
 /* Personal bests, kept on this device only. Marathon counts every run, since
@@ -1936,6 +1944,17 @@ const INK = {
   fg:"#ededf0", dim:"#c4c4cc", faint:"#9a9aa5",
   danger:"#ff5a5f"
 };
+/* The two resolved-ui-theme ends of INK's range — applyTheme() picks between
+   them (mirroring the light tokens in :root[data-ui-theme="light"] above),
+   so the well, its outline, the HUD text and the ghost piece all invert
+   along with the page chrome instead of staying dark-mode-only. */
+const INK_DARK = { ...INK, ghost:"#ffffff" };
+const INK_LIGHT = {
+  bg:"#ffffff", well:"#eeeef0", grid:"rgba(0,0,0,.20)",
+  line:"rgba(0,0,0,.20)", frame:"#0b0b0d",
+  fg:"#0b0b0d", dim:"#55555d", faint:"#83838b",
+  danger:"#c8272f", ghost:"#0b0b0d"
+};
 
 /* Short of opaque, so a custom background tints through the stack itself
    rather than only the space around it. */
@@ -1991,14 +2010,16 @@ function block(x,y,s,type,alpha=1){
    until you look twice. So only the edges with nothing of the piece on the
    other side are drawn, and the piece arrives as its own silhouette.
 
-   Fixed white regardless of theme, and the one thing on the board a theme
-   never dresses. A mark of where a piece will land is not the piece: given
-   the piece's own ink it competes with the stack it is there to be measured
-   against, and unlike the board outline it can't just borrow the theme's
-   colour — a theme is free to make that the same colour as the well fills
-   with, which the ghost can never afford to. */
+   Fixed regardless of the board's own THEME, and the one thing on the board
+   a theme never dresses. A mark of where a piece will land is not the piece:
+   given the piece's own ink it competes with the stack it is there to be
+   measured against, and unlike the board outline it can't just borrow the
+   theme's colour — a theme is free to make that the same colour as the well
+   fills with, which the ghost can never afford to. It does still flip with
+   the page's light/dark chrome (set in applyTheme(), from INK_DARK/LIGHT),
+   since that's what the well itself is drawn in. */
 const GHOST_A = 0.40;
-const GHOST_INK = "#ffffff";
+let GHOST_INK = "#ffffff";
 function ghostPiece(type,r,px,py,bx,by,cell){
   const ox=bx+px*cell, oy=by+(py-BUFFER)*cell;
   ctx.save();
@@ -4337,7 +4358,7 @@ $$(".uitheme").forEach(b=>b.onclick=()=>{
   if(CFG.uiTheme===b.dataset.uitheme) return;
   Sfx.ui();
   CFG.uiTheme=b.dataset.uitheme; saveCfg();
-  applyUiTheme(); paintUiTheme();
+  applyUiTheme(); applyTheme(); paintUiTheme();
 });
 function paintUiTheme(){
   $$(".uitheme").forEach(b=>b.classList.toggle("on",b.dataset.uitheme===CFG.uiTheme));
