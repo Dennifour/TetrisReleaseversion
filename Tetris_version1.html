@@ -83,6 +83,17 @@ body{
 }
 body.playing #bg{opacity:var(--bg-bright,.45)}
 
+/* Animated wash behind the menu veils only — faded out the moment a run
+   starts (see GrainientBG.setActive(), called from UI.show()) so it never
+   competes with #bg or costs GPU time mid-game. */
+#grainient-bg{
+  position:fixed;inset:0;z-index:-2;
+  width:100%;height:100%;display:block;
+  pointer-events:none;
+  opacity:1;transition:opacity .4s ease;
+}
+body.playing #grainient-bg{opacity:0}
+
 /* One corner icon today — pause, shown only where swipe controls leave no
    pause button on the pads — kept as its own class rather than folded
    into .pausebtn so another corner icon can reuse the same look later. */
@@ -182,7 +193,8 @@ body.swap #act-wrap{transform:translate(calc(var(--shift-x,0px) * -1),var(--shif
      behind the keyboard. */
   height:var(--vvh,100dvh);
   padding:calc(env(safe-area-inset-top) + 16px) var(--edge) 16px;
-  background:rgba(10,10,12,.94);
+  background:rgba(10,10,12,.82);
+  backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px);
   overflow:hidden auto;overscroll-behavior:contain;touch-action:pan-y;
   opacity:0;visibility:hidden;pointer-events:none;
   /* Matches EXIT_MS: the fade-out finishes exactly as UI.show() moves on
@@ -190,7 +202,7 @@ body.swap #act-wrap{transform:translate(calc(var(--shift-x,0px) * -1),var(--shif
      without cutting the animation short. */
   transition:opacity .1s ease,visibility 0s .1s;
 }
-:root[data-ui-theme="light"] .veil{background:rgba(255,255,255,.96)}
+:root[data-ui-theme="light"] .veil{background:rgba(255,255,255,.88)}
 .veil.on{opacity:1;visibility:visible;pointer-events:auto;transition:opacity .15s ease}
 
 /* The in-game pause overlay is deliberately not a .veil: it sits above live
@@ -520,6 +532,7 @@ html[lang=ko] .fold summary h3{letter-spacing:.02em}
   </button>
 </div>
 
+<canvas id="grainient-bg" aria-hidden="true"></canvas>
 <div id="bg"></div>
 <div id="stage">
   <div id="screen"><canvas id="cv"></canvas></div>
@@ -3723,7 +3736,210 @@ const Net = {
   }
 };
 
-/* 8 · UI */
+/* 8 · GRAINIENT BACKGROUND — animated WebGL wash behind the menu veils,
+   ported from React Bits' Grainient (ogl/React) to plain WebGL2 since this
+   file has no build step or framework; the shader itself is unchanged. */
+const GRAINIENT_COLORS = ["#6a5ea8","#1c1830","#07070c"];
+const GRAINIENT_CFG = {
+  timeSpeed:0.12, colorBalance:0.1, warpStrength:1.0, warpFrequency:3.2,
+  warpSpeed:0.6, warpAmplitude:40.0, blendAngle:25.0, blendSoftness:0.35,
+  rotationAmount:220.0, noiseScale:1.2, grainAmount:0.06, grainScale:2.5,
+  contrast:1.4, gamma:1.0, saturation:0.85, zoom:1.15
+};
+const GrainientBG = (()=>{
+  const VERT = `#version 300 es
+in vec2 position;
+void main(){ gl_Position=vec4(position,0.0,1.0); }
+`;
+  const FRAG = `#version 300 es
+precision highp float;
+uniform vec2 iResolution;
+uniform float iTime;
+uniform float uTimeSpeed;
+uniform float uColorBalance;
+uniform float uWarpStrength;
+uniform float uWarpFrequency;
+uniform float uWarpSpeed;
+uniform float uWarpAmplitude;
+uniform float uBlendAngle;
+uniform float uBlendSoftness;
+uniform float uRotationAmount;
+uniform float uNoiseScale;
+uniform float uGrainAmount;
+uniform float uGrainScale;
+uniform float uGrainAnimated;
+uniform float uContrast;
+uniform float uGamma;
+uniform float uSaturation;
+uniform vec2 uCenterOffset;
+uniform float uZoom;
+uniform vec3 uColor1;
+uniform vec3 uColor2;
+uniform vec3 uColor3;
+out vec4 fragColor;
+#define S(a,b,t) smoothstep(a,b,t)
+mat2 Rot(float a){float s=sin(a),c=cos(a);return mat2(c,-s,s,c);}
+vec2 hash(vec2 p){p=vec2(dot(p,vec2(2127.1,81.17)),dot(p,vec2(1269.5,283.37)));return fract(sin(p)*43758.5453);}
+float noise(vec2 p){vec2 i=floor(p),f=fract(p),u=f*f*(3.0-2.0*f);float n=mix(mix(dot(-1.0+2.0*hash(i+vec2(0.0,0.0)),f-vec2(0.0,0.0)),dot(-1.0+2.0*hash(i+vec2(1.0,0.0)),f-vec2(1.0,0.0)),u.x),mix(dot(-1.0+2.0*hash(i+vec2(0.0,1.0)),f-vec2(0.0,1.0)),dot(-1.0+2.0*hash(i+vec2(1.0,1.0)),f-vec2(1.0,1.0)),u.x),u.y);return 0.5+0.5*n;}
+void mainImage(out vec4 o, vec2 C){
+  float t=iTime*uTimeSpeed;
+  vec2 uv=C/iResolution.xy;
+  float ratio=iResolution.x/iResolution.y;
+  vec2 tuv=uv-0.5+uCenterOffset;
+  tuv/=max(uZoom,0.001);
+
+  float degree=noise(vec2(t*0.1,tuv.x*tuv.y)*uNoiseScale);
+  tuv.y*=1.0/ratio;
+  tuv*=Rot(radians((degree-0.5)*uRotationAmount+180.0));
+  tuv.y*=ratio;
+
+  float frequency=uWarpFrequency;
+  float ws=max(uWarpStrength,0.001);
+  float amplitude=uWarpAmplitude/ws;
+  float warpTime=t*uWarpSpeed;
+  tuv.x+=sin(tuv.y*frequency+warpTime)/amplitude;
+  tuv.y+=sin(tuv.x*(frequency*1.5)+warpTime)/(amplitude*0.5);
+
+  vec3 colLav=uColor1;
+  vec3 colOrg=uColor2;
+  vec3 colDark=uColor3;
+  float b=uColorBalance;
+  float s=max(uBlendSoftness,0.0);
+  mat2 blendRot=Rot(radians(uBlendAngle));
+  float blendX=(tuv*blendRot).x;
+  float edge0=-0.3-b-s;
+  float edge1=0.2-b+s;
+  float v0=0.5-b+s;
+  float v1=-0.3-b-s;
+  vec3 layer1=mix(colDark,colOrg,S(edge0,edge1,blendX));
+  vec3 layer2=mix(colOrg,colLav,S(edge0,edge1,blendX));
+  vec3 col=mix(layer1,layer2,S(v0,v1,tuv.y));
+
+  vec2 grainUv=uv*max(uGrainScale,0.001);
+  if(uGrainAnimated>0.5){grainUv+=vec2(iTime*0.05);}
+  float grain=fract(sin(dot(grainUv,vec2(12.9898,78.233)))*43758.5453);
+  col+=(grain-0.5)*uGrainAmount;
+
+  col=(col-0.5)*uContrast+0.5;
+  float luma=dot(col,vec3(0.2126,0.7152,0.0722));
+  col=mix(vec3(luma),col,uSaturation);
+  col=pow(max(col,0.0),vec3(1.0/max(uGamma,0.001)));
+  col=clamp(col,0.0,1.0);
+
+  o=vec4(col,1.0);
+}
+void main(){
+  vec4 o=vec4(0.0);
+  mainImage(o,gl_FragCoord.xy);
+  fragColor=o;
+}
+`;
+  const hexToRgb = hex => {
+    const m=/^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    return m ? [parseInt(m[1],16)/255,parseInt(m[2],16)/255,parseInt(m[3],16)/255] : [1,1,1];
+  };
+  let canvas,gl,program,u,vao,raf=0,t0=0,active=false,ready=false;
+  const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  function compile(type,src){
+    const s=gl.createShader(type); gl.shaderSource(s,src); gl.compileShader(s);
+    if(!gl.getShaderParameter(s,gl.COMPILE_STATUS)){ gl.deleteShader(s); return null; }
+    return s;
+  }
+  function setup(){
+    gl = canvas.getContext("webgl2",{alpha:false,antialias:false,powerPreference:"low-power"});
+    if(!gl) return false;
+    const vs=compile(gl.VERTEX_SHADER,VERT), fs=compile(gl.FRAGMENT_SHADER,FRAG);
+    if(!vs||!fs) return false;
+    program=gl.createProgram();
+    gl.attachShader(program,vs); gl.attachShader(program,fs); gl.linkProgram(program);
+    if(!gl.getProgramParameter(program,gl.LINK_STATUS)) return false;
+    const buf=gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER,buf);
+    // One triangle that overshoots the clip box on two sides — cheaper than
+    // a quad, and the overshoot gets clipped away for free.
+    gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1, 3,-1, -1,3]),gl.STATIC_DRAW);
+    const loc=gl.getAttribLocation(program,"position");
+    vao=gl.createVertexArray();
+    gl.bindVertexArray(vao);
+    gl.enableVertexAttribArray(loc);
+    gl.vertexAttribPointer(loc,2,gl.FLOAT,false,0,0);
+    gl.bindVertexArray(null);
+    u={};
+    ["iResolution","iTime","uTimeSpeed","uColorBalance","uWarpStrength","uWarpFrequency",
+     "uWarpSpeed","uWarpAmplitude","uBlendAngle","uBlendSoftness","uRotationAmount","uNoiseScale",
+     "uGrainAmount","uGrainScale","uGrainAnimated","uContrast","uGamma","uSaturation",
+     "uCenterOffset","uZoom","uColor1","uColor2","uColor3"].forEach(n=>{ u[n]=gl.getUniformLocation(program,n); });
+    gl.useProgram(program);
+    gl.uniform1f(u.uTimeSpeed,GRAINIENT_CFG.timeSpeed);
+    gl.uniform1f(u.uColorBalance,GRAINIENT_CFG.colorBalance);
+    gl.uniform1f(u.uWarpStrength,GRAINIENT_CFG.warpStrength);
+    gl.uniform1f(u.uWarpFrequency,GRAINIENT_CFG.warpFrequency);
+    gl.uniform1f(u.uWarpSpeed,GRAINIENT_CFG.warpSpeed);
+    gl.uniform1f(u.uWarpAmplitude,GRAINIENT_CFG.warpAmplitude);
+    gl.uniform1f(u.uBlendAngle,GRAINIENT_CFG.blendAngle);
+    gl.uniform1f(u.uBlendSoftness,GRAINIENT_CFG.blendSoftness);
+    gl.uniform1f(u.uRotationAmount,GRAINIENT_CFG.rotationAmount);
+    gl.uniform1f(u.uNoiseScale,GRAINIENT_CFG.noiseScale);
+    gl.uniform1f(u.uGrainAmount,GRAINIENT_CFG.grainAmount);
+    gl.uniform1f(u.uGrainScale,GRAINIENT_CFG.grainScale);
+    gl.uniform1f(u.uGrainAnimated,0.0);
+    gl.uniform1f(u.uContrast,GRAINIENT_CFG.contrast);
+    gl.uniform1f(u.uGamma,GRAINIENT_CFG.gamma);
+    gl.uniform1f(u.uSaturation,GRAINIENT_CFG.saturation);
+    gl.uniform2f(u.uCenterOffset,0,0);
+    gl.uniform1f(u.uZoom,GRAINIENT_CFG.zoom);
+    const [c1,c2,c3]=GRAINIENT_COLORS.map(hexToRgb);
+    gl.uniform3f(u.uColor1,c1[0],c1[1],c1[2]);
+    gl.uniform3f(u.uColor2,c2[0],c2[1],c2[2]);
+    gl.uniform3f(u.uColor3,c3[0],c3[1],c3[2]);
+    return true;
+  }
+  function resize(){
+    if(!gl) return;
+    const dpr=Math.min(devicePixelRatio||1,2);
+    const w=Math.max(1,Math.floor(innerWidth*dpr)), h=Math.max(1,Math.floor(innerHeight*dpr));
+    if(canvas.width!==w||canvas.height!==h){ canvas.width=w; canvas.height=h; gl.viewport(0,0,w,h); }
+    gl.uniform2f(u.iResolution,w,h);
+  }
+  function draw(t){
+    gl.uniform1f(u.iTime,t);
+    gl.bindVertexArray(vao);
+    gl.drawArrays(gl.TRIANGLES,0,3);
+  }
+  function frame(ts){
+    raf=0;
+    if(!active) return;
+    if(!t0) t0=ts;
+    draw((ts-t0)*0.001);
+    raf=requestAnimationFrame(frame);
+  }
+  function start(){
+    if(!ready || raf || document.hidden) return;
+    resize();
+    if(reduceMotion){ draw(0); return; }
+    raf=requestAnimationFrame(frame);
+  }
+  function stop(){ if(raf){ cancelAnimationFrame(raf); raf=0; } }
+  return {
+    init(el){
+      canvas=el;
+      try{ ready=setup(); }catch(e){ ready=false; }
+      if(!ready){ canvas.style.display="none"; return; }
+      resize();
+      addEventListener("resize",resize);
+      canvas.addEventListener("webglcontextlost",e=>{ e.preventDefault(); stop(); ready=false; },false);
+      canvas.addEventListener("webglcontextrestored",()=>{ try{ ready=setup(); }catch(e){ ready=false; } if(ready && active) start(); },false);
+      document.addEventListener("visibilitychange",()=>{ if(document.hidden) stop(); else if(active) start(); });
+    },
+    setActive(on){
+      active=on;
+      if(on) start(); else stop();
+    }
+  };
+})();
+
+/* 9 · UI */
 const esc = s => String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 
 /* Where BACK goes from each screen. */
@@ -3768,6 +3984,7 @@ const UI = {
       this.cur=id;
     }else this.cur=null;
     document.body.classList.toggle("playing",!!G && !this.cur);
+    GrainientBG.setActive(!(G && !this.cur));
     $("#screen").classList.toggle("live",!!G);
   },
   board(id){ $("#screen").classList.toggle("live", !!G && !id); },
@@ -4419,7 +4636,7 @@ $("#s-name").oninput=e=>{
   saveCfg();
 };
 
-/* 9 · LAYOUT — screen and pads solved together, published as CSS variables */
+/* 10 · LAYOUT — screen and pads solved together, published as CSS variables */
 /* Pure geometry: viewport, size multiplier and the two nudges in; screen,
    control, pad and gutter out. */
 function solve(W,H,scale,btnY,btnX,noPads){
@@ -4600,6 +4817,8 @@ applyTheme();
 resizeCanvas();
 UI.netStatus();
 render(null);
+GrainientBG.init($("#grainient-bg"));
+GrainientBG.setActive(true);
 /* Solo can wait for its player. A match cannot: the room has three other
    people in it, and the tab that just went away is about to stop running. */
 document.addEventListener("visibilitychange",()=>{
