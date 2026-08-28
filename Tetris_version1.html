@@ -25,6 +25,8 @@
   --radius-full:999px;
   --veil-rgb:10,10,12;
   --hdr:54px;
+  --navstrip:60px;
+  --sidebar-w:236px;
 }
 /* Light mode swaps every token above; nothing downstream reads a raw
    colour, so this is the only place "light" is ever spelled out. */
@@ -142,6 +144,44 @@ body:not(.playing) #site-header{opacity:1;visibility:visible;pointer-events:auto
   color:var(--fg);text-transform:lowercase;
 }
 
+/* The dashboard nav: every destination at once, under the header rather
+   than behind it. A horizontal strip on a narrow screen, a sidebar once
+   there's room for one — the breakpoint below switches which. */
+#dashboard-nav{
+  position:fixed;z-index:12;left:0;right:0;
+  top:calc(var(--hdr) + env(safe-area-inset-top));
+  height:var(--navstrip);
+  display:flex;align-items:center;gap:6px;
+  padding:0 max(16px,4vw);
+  overflow-x:auto;overscroll-behavior-x:contain;
+  scrollbar-width:none;-ms-overflow-style:none;
+  border-bottom:1px solid var(--line);
+  background:rgba(var(--veil-rgb),.86);
+  -webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);
+  opacity:0;visibility:hidden;pointer-events:none;
+  transition:opacity .25s ease;
+}
+#dashboard-nav::-webkit-scrollbar{display:none}
+body:not(.playing) #dashboard-nav{opacity:1;visibility:visible;pointer-events:auto}
+.mi.nav.dash-item{
+  flex:0 0 auto;width:auto;white-space:nowrap;
+  border-color:transparent;background:none;
+  padding:9px 16px;font-size:14px;
+}
+.mi.nav.dash-item:hover{border-color:transparent;background:var(--surface)}
+.mi.nav.dash-item:focus-visible,.mi.nav.dash-item.on,.mi.nav.dash-item:active,.mi.nav.dash-item.lit{
+  border-color:transparent;background:var(--surface-2);
+}
+@media (min-width:860px){
+  #dashboard-nav{
+    right:auto;bottom:0;height:auto;width:var(--sidebar-w);
+    flex-direction:column;align-items:stretch;gap:2px;
+    padding:22px 14px;overflow-x:visible;overflow-y:auto;
+    border-bottom:0;border-right:1px solid var(--line);
+  }
+  .mi.nav.dash-item{width:100%;white-space:normal}
+}
+
 body.land #stage{grid-template-columns:var(--pad) var(--screen-w) var(--pad);grid-template-areas:"dpad screen actions"}
 body.land.swap #stage{grid-template-areas:"actions screen dpad"}
 body.port #stage{grid-template-columns:1fr 1fr;grid-template-rows:auto auto;grid-template-areas:"screen screen" "dpad actions"}
@@ -257,11 +297,21 @@ body.swap #act-wrap{transform:translate(calc(var(--shift-x,0px) * -1),var(--shif
   --bleed:var(--edge);           /* how far a navigating slab runs past it */
   --col:min(460px,100%);         /* the column everything is measured on */
   position:fixed;inset:0;z-index:10;display:flex;justify-content:center;
-  padding:calc(var(--hdr) + env(safe-area-inset-top) + 16px) var(--edge) 16px;
+  padding:calc(var(--hdr) + var(--navstrip) + env(safe-area-inset-top) + 16px) var(--edge) 16px;
   background:rgba(var(--veil-rgb),.92);
   overflow:hidden auto;overscroll-behavior:contain;touch-action:pan-y;
   opacity:0;visibility:hidden;pointer-events:none;
   transition:opacity .18s ease .25s,visibility 0s .43s;
+}
+/* Past the breakpoint the nav is a rail on the left, not a strip on top:
+   a screen's own padding drops the strip's height and picks up the rail's
+   width instead. Declared after the rule above so it actually wins the
+   properties they share. */
+@media (min-width:860px){
+  .veil{
+    padding-top:calc(var(--hdr) + env(safe-area-inset-top) + 16px);
+    padding-left:calc(var(--sidebar-w) + var(--edge));
+  }
 }
 .veil.on{opacity:1;visibility:visible;pointer-events:auto;transition:opacity .26s ease}
 /* Centred by auto margins rather than by alignment: a screen taller than the
@@ -712,30 +762,14 @@ html[lang=ko] .fold summary h3{letter-spacing:.02em}
   </div>
 </div>
 
-<div class="veil on" id="v-menu">
-  <div class="card">
-    <div class="row">
-      <button class="mi nav cta primary" data-go="play"><span data-i18n="m_play"></span><span class="sub" data-i18n="m_play_s"></span></button>
-      <button class="mi nav cta secondary" data-go="settings"><span data-i18n="m_settings"></span><span class="sub" data-i18n="m_settings_s"></span></button>
-    </div>
-  </div>
-</div>
-
-<div class="veil" id="v-play">
-  <div class="card">
-    <h1 class="brand" data-i18n="play_t"></h1>
-    <div class="menu">
-      <button class="mi nav" data-go="solo"><span data-i18n="m_solo"></span><span class="sub" data-i18n="m_solo_s"></span></button>
-      <button class="mi nav" data-go="sprint"><span data-i18n="m_sprint"></span><span class="sub" data-i18n="m_sprint_s"></span></button>
-      <button class="mi nav" data-go="speed"><span data-i18n="m_speed"></span><span class="sub" data-i18n="m_speed_s"></span></button>
-      <button class="mi nav" data-go="versus"><span data-i18n="m_versus"></span><span class="sub" data-i18n="m_versus_s"></span></button>
-      <button class="mi nav" data-go="records"><span data-i18n="m_records"></span><span class="sub" data-i18n="m_records_s"></span></button>
-    </div>
-    <div class="menu mt16">
-      <button class="mi nav ghost" data-back="1" data-i18n="back"></button>
-    </div>
-  </div>
-</div>
+<nav id="dashboard-nav" aria-label="Main">
+  <button class="mi nav dash-item" data-go="solo"><span data-i18n="m_solo"></span></button>
+  <button class="mi nav dash-item" data-go="sprint"><span data-i18n="m_sprint"></span></button>
+  <button class="mi nav dash-item" data-go="speed"><span data-i18n="m_speed"></span></button>
+  <button class="mi nav dash-item" data-go="versus"><span data-i18n="m_versus"></span></button>
+  <button class="mi nav dash-item" data-go="records"><span data-i18n="m_records"></span></button>
+  <button class="mi nav dash-item" data-go="settings"><span data-i18n="m_settings"></span></button>
+</nav>
 
 <div class="veil" id="v-speed">
   <div class="card">
@@ -4126,13 +4160,12 @@ const Net = {
 };
 
 /* 8 · UI */
-/* Where BACK goes from each screen — the menus are a plain tree. */
+/* Where BACK goes from each screen. Everything the dashboard nav opens
+   directly (speed, records, settings, the versus lobby) falls through to
+   the default below — leaving any of those just returns to the dashboard
+   itself, same as picking a different item in it would. Only the screens
+   nested under the lobby still have a real parent to name. */
 const PARENT = {
-  "#v-play":       "#v-menu",
-  "#v-set":        "#v-menu",
-  "#v-records":    "#v-play",
-  "#v-speed":      "#v-play",
-  "#v-lobby":      "#v-play",
   "#v-server":     "#v-lobby",
   "#v-p2p":        "#v-lobby",
   "#v-online":     "#v-server",
@@ -4144,9 +4177,13 @@ const PARENT = {
 /* Leaving one of these drops whatever handshake it was holding. */
 const NET_SCREENS = {"#v-online":1,"#v-host":1,"#v-join":1};
 
+/* Which dashboard item, if any, a screen belongs to — so the nav can show
+   which section is open the same way a real sidebar would. */
+const DASH_SCREEN = {speed:"#v-speed", versus:"#v-lobby", records:"#v-records", settings:"#v-set"};
+
 const UI = {
   stack:[], rev:false,
-  cur:"#v-menu",
+  cur:null,
 
   /* One screen at a time. A move out and a move in cannot overlap — a card
      fading up through one still leaving is unreadable — so the arrival waits
@@ -4183,6 +4220,7 @@ const UI = {
     }
     else this.cur=null;
     document.body.classList.toggle("playing",!!G && !this.cur);
+    $$(".dash-item").forEach(b=>b.classList.toggle("on",DASH_SCREEN[b.dataset.go]===this.cur));
   },
   /* The board belongs to the run: up while one exists and nothing but the pause
      or result card is over it, gone the moment we head for a menu. */
@@ -4195,7 +4233,7 @@ const UI = {
   back(from){
     this.rev=true;                       // leave to the left, not downwards
     const src=from||this.cur;
-    const to=PARENT[src]||"#v-menu";
+    const to=PARENT[src]||null;
     if(NET_SCREENS[src]){ clearInterval(this._rooms); Net.reset(); }
     this.show(to);
   },
@@ -4593,8 +4631,8 @@ const UI = {
   leaveRoom(){
     clearInterval(this._rooms);
     Net.reset(); READY_P2P.me=READY_P2P.peer=false;
-    this.show("#v-menu");
-    afterScreen(()=>{ G=null; FOES=[]; render(null); });
+    this.show(null);
+    afterScreen(()=>{ G=null; FOES=[]; render(null); document.body.classList.remove("playing"); });
   },
   roomGone(){
     if(!Room.on) return;
@@ -4753,13 +4791,12 @@ $$("[data-go]").forEach(b=>b.onclick=()=>{
   else if(go==="versus"){ Net.reset(); Who.start(); UI.show("#v-lobby"); }
   else if(go==="speed") UI.show("#v-speed");
   else if(go==="records") UI.showRecords();
-  else if(go==="play") UI.show("#v-play");
   else if(go==="server") UI.show("#v-server");
   else if(go==="p2p"){ Net.reset(); UI.show("#v-p2p"); }
   else if(go==="settings") UI.openSettings();
 });
 $$("[data-back]").forEach(b=>b.onclick=()=>{ Sfx.ui(); UI.back("#"+b.closest(".veil").id); });
-$("#site-logo").onclick=()=>{ Sfx.unlock(); Sfx.ui(); UI.show("#v-menu"); };
+$("#site-logo").onclick=()=>{ Sfx.unlock(); Sfx.ui(); UI.show(null); };
 
 /* Picking a difficulty is what starts a speed run: it is the only choice the
    mode takes, so there is nothing to confirm afterwards. */
@@ -4816,8 +4853,8 @@ $("#b-restart").onclick=()=>{
   afterScreen(()=>startGame(m));
 };
 const toMenu=()=>{
-  Sfx.ui(); Net.reset(); UI.show("#v-menu");
-  afterScreen(()=>{ G=null; FOES=[]; render(null); });
+  Sfx.ui(); Net.reset(); UI.show(null);
+  afterScreen(()=>{ G=null; FOES=[]; render(null); document.body.classList.remove("playing"); });
 };
 $("#b-quit").onclick=toMenu;
 $("#b-menu2").onclick=toMenu;
