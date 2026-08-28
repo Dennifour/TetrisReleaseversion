@@ -83,33 +83,26 @@ body{
 }
 body.playing #bg{opacity:var(--bg-bright,.45)}
 
-/* The corner icons share one row, so each one's place comes from the layout
-   rather than from arithmetic that has to re-derive its neighbour's width. */
+/* One corner icon today — pause, shown only where swipe controls leave no
+   pause button on the pads — kept as its own class rather than folded
+   into .pausebtn so another corner icon can reuse the same look later. */
 .topbtns{
   position:fixed;z-index:14;
   top:max(5px,env(safe-area-inset-top));
   right:max(5px,env(safe-area-inset-right));
   display:flex;align-items:center;gap:9px;
 }
-.fsbtn{
+.topbtn{
   width:clamp(20px,3.6vmin,26px);height:clamp(20px,3.6vmin,26px);
   padding:0;border:0;background:none;cursor:pointer;
   color:var(--fg-faint);
   display:grid;place-items:center;
   transition:color .1s;
 }
-.fsbtn:hover,.fsbtn:focus-visible{color:var(--fg);outline:none}
-.fsbtn:active{color:var(--fg)}
-.fsbtn svg{width:100%;height:100%;display:block}
-.fsbtn path{fill:none;stroke:currentColor;stroke-width:2.1;stroke-linecap:round;stroke-linejoin:round}
-.fsbtn .i-shrink{display:none}
-.fsbtn.on .i-expand{display:none}
-.fsbtn.on .i-shrink{display:block}
-.fsbtn.gone{display:none}
-/* Swipe leaves no PAUSE button on the pads, so one sits to the left of the
-   fullscreen icon — only while a game is actually on screen. It comes first in
-   the row, so it keeps that side whatever the icons measure, and slides into
-   the corner by itself where fullscreen is unavailable. */
+.topbtn:hover,.topbtn:focus-visible{color:var(--fg);outline:none}
+.topbtn:active{color:var(--fg)}
+.topbtn svg{width:100%;height:100%;display:block}
+.topbtn path{fill:none;stroke:currentColor;stroke-width:2.1;stroke-linecap:round;stroke-linejoin:round}
 .pausebtn{display:none}
 body.swipe.playing .pausebtn,body.notouch.playing .pausebtn{display:grid}
 
@@ -517,14 +510,8 @@ html[lang=ko] .fold summary h3{letter-spacing:.02em}
 <body>
 
 <div class="topbtns">
-  <button id="pausebtn" class="fsbtn pausebtn" type="button" data-i18n-aria="btn_pause">
+  <button id="pausebtn" class="topbtn pausebtn" type="button" data-i18n-aria="btn_pause">
     <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M9.5 5v14M14.5 5v14"/></svg>
-  </button>
-  <button id="fsbtn" class="fsbtn" type="button" data-i18n-aria="btn_full">
-    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      <g class="i-expand"><path d="M9 3H5.5A2.5 2.5 0 0 0 3 5.5V9M15 3h3.5A2.5 2.5 0 0 1 21 5.5V9M9 21H5.5A2.5 2.5 0 0 1 3 18.5V15M15 21h3.5a2.5 2.5 0 0 0 2.5-2.5V15"/></g>
-      <g class="i-shrink"><path d="M3 9h3.5A2.5 2.5 0 0 0 9 6.5V3M21 9h-3.5A2.5 2.5 0 0 1 15 6.5V3M3 15h3.5A2.5 2.5 0 0 1 9 17.5V21M21 15h-3.5a2.5 2.5 0 0 0-2.5 2.5V21"/></g>
-    </svg>
   </button>
 </div>
 
@@ -744,6 +731,7 @@ html[lang=ko] .fold summary h3{letter-spacing:.02em}
           </div>
           <h3 data-i18n="set_pres"></h3>
           <div class="opts">
+            <div class="sp" id="full-row" hidden><span data-i18n="set_full"></span><div class="sw" id="s-full"></div></div>
             <div class="sp"><span data-i18n="set_ghost"></span><div class="sw on" id="s-ghost"></div></div>
             <div class="sp"><span data-i18n="set_grid"></span><div class="sw on" id="s-grid"></div></div>
             <div class="sp"><span data-i18n="set_bob"></span><div class="sw on" id="s-bob"></div></div>
@@ -1030,7 +1018,6 @@ const I18N = {
   back:["BACK","뒤로"],
   bg_hint_off:["This theme has no background image.","이 테마에는 배경 이미지가 없습니다."],
   bg_hint_set:["Shown around the board while you play — never on a menu.","플레이 중 보드 주변에 표시됩니다. 메뉴에서는 표시되지 않습니다."],
-  btn_full:["Fullscreen","전체화면"],
   btn_hold:["HOLD","홀드"],
   btn_pause:["PAUSE","정지"],
   c_audio:["AUDIO","소리"],
@@ -1172,6 +1159,7 @@ const I18N = {
   set_das:["DAS — delay before auto-shift","DAS — 자동 이동 시작 지연"],
   set_dpad:["D-PAD","D패드"],
   set_dpad_s:["On-screen d-pad and buttons below or beside the well.","화면에 D패드와 버튼이 표시됩니다."],
+  set_full:["Fullscreen","전체화면"],
   set_ghost:["Ghost piece","고스트 블록"],
   set_grid:["Board grid","보드 격자"],
   set_handling:["Handling","조작감"],
@@ -4521,15 +4509,17 @@ $("#chat-in").addEventListener("focus",()=>{
 $("#pausebtn").addEventListener("click",e=>{ e.preventDefault(); e.stopPropagation(); UI.togglePause(); });
 $("#pausebtn").addEventListener("pointerdown",e=>e.stopPropagation());
 
-/* fullscreen — hidden on iPhone Safari, which has no element fullscreen */
-const FSBTN=$("#fsbtn");
+/* fullscreen — hidden on iPhone Safari, which has no element fullscreen.
+   A Settings toggle rather than a corner button; its "on" state mirrors
+   the real fullscreen element rather than a stored preference, since a
+   reload can't put the page back into fullscreen without a fresh user
+   gesture to ask for it. */
 const fsEl =()=>document.fullscreenElement||document.webkitFullscreenElement||null;
 const fsCan=!!(document.documentElement.requestFullscreen||document.documentElement.webkitRequestFullscreen);
 
-if(!fsCan){ FSBTN.classList.add("gone"); }
-else{
-  FSBTN.addEventListener("click",e=>{
-    e.preventDefault(); e.stopPropagation();
+if(fsCan){
+  $("#full-row").hidden=false;
+  $("#s-full").addEventListener("click",()=>{
     Sfx.ui();
     const d=document, el=d.documentElement;
     try{
@@ -4537,9 +4527,8 @@ else{
       else       (el.requestFullscreen||el.webkitRequestFullscreen).call(el);
     }catch(_){}
   });
-  FSBTN.addEventListener("pointerdown",e=>e.stopPropagation());
   const syncFs=()=>{
-    FSBTN.classList.toggle("on",!!fsEl());
+    $("#s-full").classList.toggle("on",!!fsEl());
     layout();
     setTimeout(layout,120);
   };
