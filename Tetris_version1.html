@@ -202,6 +202,10 @@ body.swap #act-wrap{transform:translate(calc(var(--shift-x,0px) * -1),var(--shif
 :root[data-ui-theme="light"] .pause-menu{background:rgba(255,255,255,.96)}
 .pause-menu.on{opacity:1;visibility:visible;pointer-events:auto;transition:opacity .16s ease}
 .pause-menu.versus #p-restart{display:none}
+/* .card's rest state is mid-slide-in, normally cleared by .veil.on — this
+   overlay is never a .veil, so it needs its own reset or the card sits
+   permanently offset off the left edge. */
+#game-over .card{transform:none}
 .card{
   width:var(--col);margin-block:auto;padding-right:12px;
   transform:translateX(-46px) scale(.99);
@@ -277,6 +281,7 @@ h3:first-of-type{margin-top:4px}
 .rec .k{font-size:12px;letter-spacing:.13em;text-transform:uppercase;color:var(--fg-faint);font-weight:600;line-height:1.4}
 .rec .v{font-size:clamp(19px,4.6vmin,26px);font-weight:600;letter-spacing:.04em;color:var(--fg);white-space:nowrap;font-variant-numeric:tabular-nums}
 .rec.none .v{color:var(--fg-faint);font-size:clamp(14px,3.2vmin,16px)}
+#go-best{color:#4fe0a8;font-weight:700}
 
 @media (max-height:600px){
   .brand{margin-bottom:12px}
@@ -574,6 +579,17 @@ html[lang=ko] .fold summary h3{letter-spacing:.02em}
       <button class="mi nav" id="p-resume" data-i18n="pause_resume"></button>
       <button class="mi nav" id="p-restart" data-i18n="pause_restart"></button>
       <button class="mi nav" id="p-quit" data-i18n="pause_quit"></button>
+    </div>
+  </div>
+</div>
+
+<div class="pause-menu" id="game-over">
+  <div class="card">
+    <h1 class="brand" id="go-title"></h1>
+    <p class="tag" id="go-best" data-i18n="go_best" hidden></p>
+    <div class="recs" id="go-stats"></div>
+    <div class="menu mt16">
+      <button class="mi nav" id="go-menu" data-i18n="go_menu"></button>
     </div>
   </div>
 </div>
@@ -1095,6 +1111,8 @@ const I18N = {
   g_time:["TIME","시간"],
   g_timeleft:["TIME LEFT","남은 시간"],
   g_topout:["TOP OUT","탑 아웃"],
+  go_best:["NEW BEST!","신기록!"],
+  go_menu:["BACK TO MENU","메뉴로 돌아가기"],
   host_connect:["CONNECT","연결"],
   host_copy:["COPY CODE","코드 복사"],
   host_hint:["Send the code however you like. Nothing goes through a server.","코드는 아무 방법으로나 보내도 됩니다. 서버를 거치지 않습니다."],
@@ -3899,6 +3917,28 @@ const UI = {
     afterScreen(()=>{ G=null; FOES=[]; render(null); document.body.classList.remove("playing"); });
   },
 
+  /* game over — solo/sprint/speed only; versus keeps ticking for the room
+     and reports through renderRoom() instead (see gameOver() below). */
+  showGameOver(beat){
+    const g=G, secs=Math.max(0,((g.endedAt||now())-g.startedAt)/1000);
+    const time=String(Math.floor(secs/60)).padStart(2,"0")+":"+(secs%60).toFixed(2).padStart(5,"0");
+    $("#go-title").textContent = g.won ? T("g_clear") : T("g_topout");
+    $("#go-best").hidden = !beat;
+    const rows = g.mode==="sprint"
+      ? [[T("g_time"),time],[T("g_lines"),g.lines]]
+      : g.mode==="speed"
+      ? [[T("g_lines"),g.lines],[T("g_level"),g.level],[T("g_time"),time]]
+      : [[T("g_score"),g.score.toLocaleString()],[T("g_lines"),g.lines],[T("g_level"),g.level],[T("g_time"),time]];
+    $("#go-stats").innerHTML = rows.map(([k,v])=>
+      '<div class="rec"><span class="k">'+esc(k)+'</span><span class="v">'+esc(String(v))+'</span></div>').join("");
+    $("#game-over").classList.add("on");
+  },
+  hideGameOver(){ $("#game-over").classList.remove("on"); },
+  backToMenuFromGameOver(){
+    this.hideGameOver();
+    this.quitToMenu();
+  },
+
   /* records */
   showRecords(){ this.renderRecords(); this.show("#v-records"); },
   renderRecords(){
@@ -4125,8 +4165,9 @@ const UI = {
   },
   gameOver(won){
     if(G.mode==="versus" && Net.mode!=="room"){ if(won) WINS_P2P.me++; else WINS_P2P.peer++; }
-    noteRun(G,won,((G.endedAt||now())-G.startedAt)/1000);
-    this.renderRoom();
+    const beat=noteRun(G,won,((G.endedAt||now())-G.startedAt)/1000);
+    if(G.mode==="versus") this.renderRoom();
+    else this.showGameOver(beat);
   },
 
   /* settings */
@@ -4233,6 +4274,7 @@ $("#b-leave").onclick=()=>{ Sfx.ui(); UI.leaveRoom(); };
 $("#p-resume").onclick=()=>{ Sfx.ui(); UI.closePauseMenu(); };
 $("#p-restart").onclick=()=>{ Sfx.ui(); UI.restartFromPause(); };
 $("#p-quit").onclick=()=>{ Sfx.ui(); UI.quitToMenu(); };
+$("#go-menu").onclick=()=>{ Sfx.ui(); UI.backToMenuFromGameOver(); };
 function openChat(){
   $("#chat-popup").classList.add("on");
   $("#b-chat-toggle").classList.add("on");
