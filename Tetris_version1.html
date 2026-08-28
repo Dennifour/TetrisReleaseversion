@@ -344,7 +344,7 @@ input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;bac
 @media (min-width:760px){
   #v-set .card,#v-lobby .card{width:min(760px,100%)}
   .split{display:grid;grid-template-columns:180px 1fr;gap:8px 40px;align-items:start}
-  #v-set .card{width:min(900px,100%)}
+  #v-set .card{width:min(900px,100%);margin-block:0}
   #v-set .split{grid-template-columns:280px 1fr}
 }
 
@@ -616,7 +616,6 @@ html[lang=ko] .fold summary h3{letter-spacing:.02em}
 
 <div class="veil" id="v-set">
   <div class="card">
-    <h1 class="brand" data-i18n="c_settings"></h1>
     <div class="split" id="set-split">
       <button class="mi ghost panel-back" type="button" id="set-panelback">&larr; <span data-i18n="c_settings"></span></button>
       <div class="menu rail" id="set-rail">
