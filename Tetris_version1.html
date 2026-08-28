@@ -24,6 +24,7 @@
   --radius-sm:10px;
   --radius-full:999px;
   --veil-rgb:10,10,12;
+  --hdr:54px;
 }
 /* Light mode swaps every token above; nothing downstream reads a raw
    colour, so this is the only place "light" is ever spelled out. */
@@ -92,7 +93,7 @@ body.playing #bg{opacity:var(--bg-bright,.45)}
 /* The corner icons share one row, so each one's place comes from the layout
    rather than from arithmetic that has to re-derive its neighbour's width. */
 .topbtns{
-  position:fixed;z-index:11;
+  position:fixed;z-index:14;
   top:max(5px,env(safe-area-inset-top));
   right:max(5px,env(safe-area-inset-right));
   display:flex;align-items:center;gap:9px;
@@ -118,6 +119,28 @@ body.playing #bg{opacity:var(--bg-bright,.45)}
    the corner by itself where fullscreen is unavailable. */
 .pausebtn{display:none}
 body.swipe.playing .pausebtn,body.notouch.playing .pausebtn{display:grid}
+
+/* A site header, not another app dialog: it stays put while the screens
+   below it swap, the way a page's chrome outlives its content. Gone only
+   while a run is actually live — the board gets the full frame then, same
+   as it always has. */
+#site-header{
+  position:fixed;top:0;left:0;right:0;z-index:13;
+  height:calc(var(--hdr) + env(safe-area-inset-top));
+  padding:env(safe-area-inset-top) max(20px,4vw) 0;
+  display:flex;align-items:center;
+  border-bottom:1px solid var(--line);
+  background:rgba(var(--veil-rgb),.86);
+  -webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);
+  opacity:0;visibility:hidden;pointer-events:none;
+  transition:opacity .25s ease;
+}
+body:not(.playing) #site-header{opacity:1;visibility:visible;pointer-events:auto}
+.site-logo{
+  border:0;background:none;padding:0;cursor:pointer;
+  font-family:inherit;font-weight:800;font-size:16px;letter-spacing:-.02em;
+  color:var(--fg);text-transform:lowercase;
+}
 
 body.land #stage{grid-template-columns:var(--pad) var(--screen-w) var(--pad);grid-template-areas:"dpad screen actions"}
 body.land.swap #stage{grid-template-areas:"actions screen dpad"}
@@ -233,8 +256,8 @@ body.swap #act-wrap{transform:translate(calc(var(--shift-x,0px) * -1),var(--shif
   --edge:max(16px,5vw);          /* the page margin */
   --bleed:var(--edge);           /* how far a navigating slab runs past it */
   --col:min(460px,100%);         /* the column everything is measured on */
-  position:fixed;inset:0;z-index:10;display:flex;justify-content:flex-start;
-  padding:16px var(--edge);
+  position:fixed;inset:0;z-index:10;display:flex;justify-content:center;
+  padding:calc(var(--hdr) + env(safe-area-inset-top) + 16px) var(--edge) 16px;
   background:rgba(var(--veil-rgb),.92);
   overflow:hidden auto;overscroll-behavior:contain;touch-action:pan-y;
   opacity:0;visibility:hidden;pointer-events:none;
@@ -646,6 +669,10 @@ html[lang=ko] .fold summary h3{letter-spacing:.02em}
 </style>
 </head>
 <body>
+
+<header id="site-header">
+  <button class="site-logo" id="site-logo" type="button">tetris</button>
+</header>
 
 <div class="topbtns">
   <button id="pausebtn" class="fsbtn pausebtn" type="button" data-i18n-aria="btn_pause">
@@ -4732,6 +4759,7 @@ $$("[data-go]").forEach(b=>b.onclick=()=>{
   else if(go==="settings") UI.openSettings();
 });
 $$("[data-back]").forEach(b=>b.onclick=()=>{ Sfx.ui(); UI.back("#"+b.closest(".veil").id); });
+$("#site-logo").onclick=()=>{ Sfx.unlock(); Sfx.ui(); UI.show("#v-menu"); };
 
 /* Picking a difficulty is what starts a speed run: it is the only choice the
    mode takes, so there is nothing to confirm afterwards. */
