@@ -267,6 +267,25 @@ h3:first-of-type{margin-top:4px}
     opacity:1;transform:none;
   }
 }
+/* In an exclusive-choice row (settings tabs, language, theme, touch mode,
+   match rule, the lobby rail) only the .on item should ever show a pill.
+   Without this, hovering or pressing toward a different item shows its
+   own preview pill while the previously-picked one is still .on, so two
+   are lit until the click that actually moves selection over. */
+[data-tab].mi.on~[data-tab].mi:not(.on):is(:hover,:active)::after,
+[data-tab].mi:not(.on):has(~[data-tab].mi.on):is(:hover,:active)::after,
+[data-lang].mi.on~[data-lang].mi:not(.on):is(:hover,:active)::after,
+[data-lang].mi:not(.on):has(~[data-lang].mi.on):is(:hover,:active)::after,
+[data-uitheme].mi.on~[data-uitheme].mi:not(.on):is(:hover,:active)::after,
+[data-uitheme].mi:not(.on):has(~[data-uitheme].mi.on):is(:hover,:active)::after,
+[data-touch].mi.on~[data-touch].mi:not(.on):is(:hover,:active)::after,
+[data-touch].mi:not(.on):has(~[data-touch].mi.on):is(:hover,:active)::after,
+[data-rule].mi.on~[data-rule].mi:not(.on):is(:hover,:active)::after,
+[data-rule].mi:not(.on):has(~[data-rule].mi.on):is(:hover,:active)::after,
+[data-panel].mi.on~[data-panel].mi:not(.on):is(:hover,:active)::after,
+[data-panel].mi:not(.on):has(~[data-panel].mi.on):is(:hover,:active)::after{
+  opacity:0;
+}
 .mi .sub{display:none}
 .mi.ctr{text-align:center;width:100%;max-width:440px}
 .mi.lang{text-transform:none}
