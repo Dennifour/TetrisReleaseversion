@@ -361,11 +361,11 @@ input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;bac
   #v-set .card,#v-lobby .card{width:min(760px,100%)}
   .split{display:grid;grid-template-columns:180px 1fr;gap:8px 40px;align-items:start}
   #v-set .card{width:min(900px,100%);margin-block:auto}
-  #v-set .split{
+  #v-set .split,#v-lobby .split{
     grid-template-columns:280px 1fr;align-items:center;
     height:min(620px,calc(100vh - 160px));overflow:hidden;
   }
-  #v-set .panel-area{height:100%;overflow-y:auto}
+  #v-set .panel-area,#v-lobby .panel-area{height:100%;overflow-y:auto}
 }
 
 .panel{display:none}
@@ -563,8 +563,8 @@ html[lang=ko] .fold summary h3{letter-spacing:.02em}
     <div class="split" id="lobby-split">
       <button class="mi ghost panel-back" type="button" id="lobby-panelback">&larr; <span data-i18n="lob_t"></span></button>
       <div class="menu rail" id="lobby-rail">
-        <button class="mi on" data-panel="server"><span data-i18n="lob_server"></span></button>
-        <button class="mi" data-panel="p2p"><span data-i18n="lob_p2p"></span></button>
+        <button class="mi nav on" data-panel="server"><span data-i18n="lob_server"></span></button>
+        <button class="mi nav" data-panel="p2p"><span data-i18n="lob_p2p"></span></button>
         <button class="mi nav ghost mt16" data-back="1" data-i18n="back"></button>
       </div>
       <div class="panel-area">
