@@ -256,35 +256,18 @@ h3:first-of-type{margin-top:4px}
 }
 :root[data-ui-theme="light"] .mi::after{border-color:#000}
 .mi:focus-visible,.mi.on,.mi:active,.mi.lit{ outline:none; }
-/* No transition here: with a fade-in, the incoming pill and the outgoing
-   one's still-visible tail overlap on screen whenever selection moves
-   straight from one item to another, so both must snap. */
+/* The transition lives only on the "on" state, not the rest state above:
+   fading in still animates, but losing hover/focus snaps the pill away
+   instantly instead of lingering while it fades out. */
 .mi:focus-visible::after,.mi.on::after,.mi:active::after,.mi.lit::after{
   opacity:1;transform:none;
+  transition:opacity .16s ease,transform .16s cubic-bezier(.2,.9,.25,1);
 }
 @media (hover:hover){
   .mi:hover::after{
     opacity:1;transform:none;
+    transition:opacity .16s ease,transform .16s cubic-bezier(.2,.9,.25,1);
   }
-}
-/* In an exclusive-choice row (settings tabs, language, theme, touch mode,
-   match rule, the lobby rail) only the .on item should ever show a pill.
-   Without this, hovering or pressing toward a different item shows its
-   own preview pill while the previously-picked one is still .on, so two
-   are lit until the click that actually moves selection over. */
-[data-tab].mi.on~[data-tab].mi:not(.on):is(:hover,:active)::after,
-[data-tab].mi:not(.on):has(~[data-tab].mi.on):is(:hover,:active)::after,
-[data-lang].mi.on~[data-lang].mi:not(.on):is(:hover,:active)::after,
-[data-lang].mi:not(.on):has(~[data-lang].mi.on):is(:hover,:active)::after,
-[data-uitheme].mi.on~[data-uitheme].mi:not(.on):is(:hover,:active)::after,
-[data-uitheme].mi:not(.on):has(~[data-uitheme].mi.on):is(:hover,:active)::after,
-[data-touch].mi.on~[data-touch].mi:not(.on):is(:hover,:active)::after,
-[data-touch].mi:not(.on):has(~[data-touch].mi.on):is(:hover,:active)::after,
-[data-rule].mi.on~[data-rule].mi:not(.on):is(:hover,:active)::after,
-[data-rule].mi:not(.on):has(~[data-rule].mi.on):is(:hover,:active)::after,
-[data-panel].mi.on~[data-panel].mi:not(.on):is(:hover,:active)::after,
-[data-panel].mi:not(.on):has(~[data-panel].mi.on):is(:hover,:active)::after{
-  opacity:0;
 }
 .mi .sub{display:none}
 .mi.ctr{text-align:center;width:100%;max-width:440px}
@@ -4127,26 +4110,12 @@ const UI = {
   }
 };
 
-/* Picking one of several .mi buttons waits for "click" to fire — but a
-   button's own pill shows on press, before click, so a quick tap onto a
-   *different* button was showing that button's press-pill next to the
-   still-.on pill of whichever one was picked last, until the click event
-   finally caught up and moved "on" over. Firing on pointerdown instead
-   moves "on" at the same moment the pressed button's own pill appears,
-   so there's never a frame with two pills lit. "click" is kept as a
-   fallback for keyboard activation, which has no pointerdown to catch it. */
-function onSelect(el,fn){
-  let pressedAt=0;
-  el.addEventListener("pointerdown",e=>{ pressedAt=e.timeStamp; fn(); });
-  el.addEventListener("click",e=>{ if(e.timeStamp-pressedAt>500) fn(); });
-}
-
 /* A rail/panel split behaves the same way in Settings and the lobby: pick
    an item, its panel opens (mobile: replaces the list; wide: already
    beside it), the small back link only ever needs to clear one class. */
 function splitSelect(splitId,itemSel,groupAttr){
   const root=$(splitId);
-  root.querySelectorAll(itemSel).forEach(b=>onSelect(b,()=>{
+  root.querySelectorAll(itemSel).forEach(b=>b.addEventListener("click",()=>{
     Sfx.ui();
     root.querySelectorAll(itemSel).forEach(o=>o.classList.toggle("on",o===b));
     root.querySelectorAll(".panel-area>[data-panel]").forEach(p=>p.classList.toggle("on",p.dataset.panel===b.dataset[groupAttr]));
@@ -4220,7 +4189,7 @@ $("#b-spectate").onclick=()=>{
   const m=Room.me();
   UI.setSpectating(!(m&&m.spec));
 };
-$$(".rule").forEach(b=>onSelect(b,()=>{ Sfx.ui(); UI.setRule(b.dataset.rule); }));
+$$(".rule").forEach(b=>b.onclick=()=>{ Sfx.ui(); UI.setRule(b.dataset.rule); });
 $("#b-leave").onclick=()=>{ Sfx.ui(); UI.leaveRoom(); };
 
 /* pause menu */
@@ -4274,11 +4243,11 @@ function repaintSettings(){ rangePainters.forEach(p=>p()); }
 
 /* Which panel settings opens on, remembered for as long as the page lives. */
 let TAB="general";
-$$("#set-rail [data-tab]").forEach(b=>onSelect(b,()=>{
+$$("#set-rail [data-tab]").forEach(b=>b.onclick=()=>{
   Sfx.ui();
   UI.openTab(b.dataset.tab);
   $("#set-split").classList.add("panel-open");
-}));
+});
 $("#set-panelback").onclick=()=>{ Sfx.ui(); $("#set-split").classList.remove("panel-open"); };
 
 /* <details> puts its block on screen the instant it opens, with no height to
@@ -4370,12 +4339,12 @@ function bindRows(host,which){
   });
 }
 
-$$(".uitheme").forEach(b=>onSelect(b,()=>{
+$$(".uitheme").forEach(b=>b.onclick=()=>{
   if(CFG.uiTheme===b.dataset.uitheme) return;
   Sfx.ui();
   CFG.uiTheme=b.dataset.uitheme; saveCfg();
   applyUiTheme(); applyTheme(); paintUiTheme();
-}));
+});
 function paintUiTheme(){
   $$(".uitheme").forEach(b=>b.classList.toggle("on",b.dataset.uitheme===CFG.uiTheme));
 }
@@ -4389,11 +4358,11 @@ function paintBg(){
 }
 bindRange("#s-bg","bgBright","#l-bg",v=>v+"%",applyBg);
 
-$$(".tmode").forEach(b=>onSelect(b,()=>{
+$$(".tmode").forEach(b=>b.onclick=()=>{
   Sfx.ui();
   CFG.touch=b.dataset.touch; CFG.touchSet=true; saveCfg();
   applyTouchMode(); paintTouch();
-}));
+});
 function paintTouch(){
   $$(".tmode").forEach(b=>b.classList.toggle("on",b.dataset.touch===CFG.touch));
   const dpad=CFG.touch==="dpad", swipe=CFG.touch==="swipe";
@@ -4421,11 +4390,11 @@ $("#b-keyreset").onclick=()=>{ Sfx.ui(); CFG.keys=fillBinds(null,KEYS_DEFAULT); 
 $("#b-padreset").onclick=()=>{ Sfx.ui(); CFG.pads=fillBinds(null,PADS_DEFAULT); saveCfg(); bindRows("#padlist","pads"); };
 
 $$(".lang").forEach(b=>{
-  onSelect(b,()=>{
+  b.onclick=()=>{
     if(CFG.lang===b.dataset.lang) return;
     CFG.lang=b.dataset.lang; saveCfg(); Sfx.ui();
     applyLang();
-  });
+  };
 });
 
 [["#s-snd","snd"],["#s-bob","bob"],["#s-ghost","ghost"],
