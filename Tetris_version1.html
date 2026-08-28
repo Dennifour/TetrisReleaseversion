@@ -269,34 +269,6 @@ h3:first-of-type{margin-top:4px}
     transition:opacity .16s ease,transform .16s cubic-bezier(.2,.9,.25,1);
   }
 }
-/* Plain nav buttons (Home, Play, pause menu, ...) never hold a selected
-   state, so their hover pill fading in above is never a problem: only
-   one of them is ever under the pointer at once. But in an
-   exclusive-choice row — settings tabs, language, theme, touch mode,
-   match rule, the lobby rail — one item's pill (.on) is persistent
-   while a sibling's own hover/press pill can light up independently
-   of it, so the two can otherwise be lit in the same frame: on a
-   sibling's press or on the fade-in itself. Both are shut off here so
-   only the .on item ever shows a pill in that kind of row; the swap
-   at the click that actually changes .on is instant either way. */
-[data-tab].mi::after,[data-lang].mi::after,[data-uitheme].mi::after,
-[data-touch].mi::after,[data-rule].mi::after,[data-panel].mi::after{
-  transition:none;
-}
-[data-tab].mi.on~[data-tab].mi:not(.on):is(:hover,:active)::after,
-[data-tab].mi:not(.on):has(~[data-tab].mi.on):is(:hover,:active)::after,
-[data-lang].mi.on~[data-lang].mi:not(.on):is(:hover,:active)::after,
-[data-lang].mi:not(.on):has(~[data-lang].mi.on):is(:hover,:active)::after,
-[data-uitheme].mi.on~[data-uitheme].mi:not(.on):is(:hover,:active)::after,
-[data-uitheme].mi:not(.on):has(~[data-uitheme].mi.on):is(:hover,:active)::after,
-[data-touch].mi.on~[data-touch].mi:not(.on):is(:hover,:active)::after,
-[data-touch].mi:not(.on):has(~[data-touch].mi.on):is(:hover,:active)::after,
-[data-rule].mi.on~[data-rule].mi:not(.on):is(:hover,:active)::after,
-[data-rule].mi:not(.on):has(~[data-rule].mi.on):is(:hover,:active)::after,
-[data-panel].mi.on~[data-panel].mi:not(.on):is(:hover,:active)::after,
-[data-panel].mi:not(.on):has(~[data-panel].mi.on):is(:hover,:active)::after{
-  opacity:0;
-}
 .mi .sub{display:none}
 .mi.ctr{text-align:center;width:100%;max-width:440px}
 .mi.lang{text-transform:none}
