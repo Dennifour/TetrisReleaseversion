@@ -450,6 +450,7 @@ html[lang=ko] .fold summary h3{letter-spacing:.02em}
 }
 .seat-row.mine{border-color:var(--line-strong)}
 .seat-row.ready{border-color:#4fe0a8}
+.seat-row.spectating{opacity:.6}
 .seat-row .w{font-size:19px;font-weight:700;font-variant-numeric:tabular-nums}
 .seat-row .w small{margin-left:6px;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--fg-faint);font-weight:600}
 .seat-row .nm{font-size:13.5px;font-weight:600;color:var(--fg-dim)}
@@ -457,9 +458,12 @@ html[lang=ko] .fold summary h3{letter-spacing:.02em}
 .rule-block{display:flex;flex-direction:column;align-items:flex-start;gap:6px}
 .rule-block .row{width:100%}
 .seat-col{display:flex;flex-direction:column;align-items:stretch;gap:14px;width:100%}
-#b-ready{width:auto;align-self:center;text-align:center;border:1.5px solid var(--line-strong);padding-inline:.4em}
+.ready-row{width:auto;align-self:center;justify-content:center}
+#b-ready,#b-spectate{text-align:center;border:1.5px solid var(--line-strong);padding-inline:.4em}
 #b-ready.ready{border-color:#4fe0a8;color:#4fe0a8}
-#b-ready.on::after,#b-ready:active::after{opacity:0}
+#b-spectate.on{border-color:var(--fg);color:var(--fg)}
+#b-ready.on::after,#b-ready:active::after,
+#b-spectate.on::after,#b-spectate:active::after{opacity:0}
 
 /* A messenger-style panel, always visible on the room's right edge —
    no FAB, no modal to open. */
@@ -495,7 +499,8 @@ html[lang=ko] .fold summary h3{letter-spacing:.02em}
   .room-chat{flex:1 1 auto;min-width:280px;max-height:60vh}
 }
 @media (max-width:759px){
-  #b-ready{width:100%}
+  .ready-row{width:100%}
+  .ready-row>.mi{flex:1 1 0}
   .room-chat{height:40vh}
 }
 
@@ -682,7 +687,10 @@ html[lang=ko] .fold summary h3{letter-spacing:.02em}
         </div>
         <p class="hint" id="rule-hint"></p>
       </div>
-      <button class="mi nav ready" id="b-ready" data-i18n="room_ready"></button>
+      <div class="row ready-row" id="readyrow">
+        <button class="mi nav ready" id="b-ready" data-i18n="room_ready"></button>
+        <button class="mi nav spectate" id="b-spectate" data-i18n="room_spectate"></button>
+      </div>
     </div>
 
     <div class="room-chat">
@@ -1075,6 +1083,7 @@ const I18N = {
   g_paused:["PAUSED","일시정지"],
   g_score:["SCORE","점수"],
   g_sent:["SENT","보냄"],
+  g_spectating:["SPECTATING","관전 중"],
   g_time:["TIME","시간"],
   g_timeleft:["TIME LEFT","남은 시간"],
   go_best:["NEW BEST!","신기록!"],
@@ -1137,7 +1146,10 @@ const I18N = {
   room_hint_n:["{n} in the room. Everyone readies up, then it starts. Up to four.","방에 {n}명. 모두 준비하면 시작합니다. 최대 4명."],
   room_leave:["LEAVE","나가기"],
   room_ready:["READY","준비 완료"],
+  room_spectate:["SPECTATE","관전하기"],
+  room_spectating:["SPECTATING","관전 중"],
   room_unready:["CANCEL READY","준비 취소"],
+  room_unspectate:["STOP SPECTATING","관전 그만하기"],
   room_wins:["WINS","승"],
   room_you:["YOU","나"],
   rule_attack:["ATTACK","공격전"],
@@ -1506,7 +1518,7 @@ class Game {
     this.attackSent=0; this.attackRecv=0;
     this.pendingGarbage=[];
     this.garbageHole=rnd(COLS);
-    this.over=false; this.won=false; this.paused=false;
+    this.over=false; this.won=false; this.paused=false; this.spectating=false;
     this.startedAt=now(); this.endedAt=0;
     this.pieceCount=0;
     this.dropTimer=0; this.lockTimer=0; this.lockResets=0; this.grounded=false;
@@ -2275,7 +2287,9 @@ function drawWell(g){
 
   if(g.over){
     ctx.fillStyle="rgba(10,10,12,.86)"; ctx.fillRect(bx,by,bw,bh);
-    textFit(g.won?T("g_clear"):T("g_over"),bx+bw/2,by+bh/2,TS(1.0),g.won?INK.fg:INK.danger,"center",600,TS(1.0)*0.14,bw*0.9);
+    const label=g.spectating?T("g_spectating"):(g.won?T("g_clear"):T("g_over"));
+    const col=g.spectating?INK.faint:(g.won?INK.fg:INK.danger);
+    textFit(label,bx+bw/2,by+bh/2,TS(1.0),col,"center",600,TS(1.0)*0.14,bw*0.9);
   }
   if(g.paused && !g.over){
     ctx.fillStyle="rgba(10,10,12,.86)"; ctx.fillRect(bx,by,bw,bh);
@@ -2814,6 +2828,7 @@ function settleScore(){
 function startMatch(){
   if(G && G.mode==="versus" && !G.over) return;
   Net.lastB="";                       // a rematch starts from an empty well, not the last one sent
+  const spectating=Room.on && !!(Room.me()&&Room.me().spec);
   if(Room.on){
     Room.set("d",false); Room.set("b",null); Room.set("rdy",false);
     /* The write is a round trip away, and the host decides whether to call a
@@ -2824,6 +2839,12 @@ function startMatch(){
   UI.renderRoom();
   UI.closeAll();
   startGame("versus");
+  /* A spectator gets the same well and countdown as everyone else — one
+     shared "the match is starting" beat for the room — but never plays:
+     marked over from the first frame, quietly rather than through die(),
+     which would broadcast a loss for a well that was never in the round
+     (spectators are left out of the roster entirely, see poll() below). */
+  if(spectating){ G.spectating=true; G.over=true; }
 }
 let rafId=0, lastT=0, sendAcc=0;
 
@@ -3357,7 +3378,7 @@ const Room = {
       const list=Object.keys(v.p).map(pid=>{
         const r=v.p[pid]||{};
         return {pid, n:String(r.n||"").slice(0,12)||T("opponent"), j:r.j||0, t:r.t||0,
-                rdy:!!r.rdy, w:r.w|0, d:!!r.d, b:r.b||null};
+                rdy:!!r.rdy, w:r.w|0, d:!!r.d, b:r.b||null, spec:!!r.spec};
       }).filter(p=>p.pid===PID || nowMs-p.t<ROOM_GONE)
         .sort((a,b)=>a.j-b.j||(a.pid<b.pid?-1:1));
 
@@ -3418,9 +3439,10 @@ const Room = {
       if(v.go && v.go.at && v.go.at!==this.lastGo){
         this.lastGo=v.go.at;
         this.starting=now();
-        /* Whoever is in the room as the start lands is in the round. Taken
-           here, before anyone can arrive to watch it. */
-        this.roster=new Map(list.map(p=>[p.pid,p.j]));
+        /* Whoever is in the room as the start lands is in the round —
+           spectators excluded, so a foe's board never shows one, and
+           checkLastStanding()/roster.size never count one. */
+        this.roster=new Map(list.filter(p=>!p.spec).map(p=>[p.pid,p.j]));
         this.dropped.clear();
         NET_SEED=v.go.s>>>0;
         NET_RULE=v.go.r==="score"?"score":"attack";
@@ -3447,7 +3469,7 @@ const Room = {
        from the first one keeps a seed nobody else is playing. The time is a
        backstop for a call that never landed, not a schedule. */
     if(this.starting && now()-this.starting<8000) return;
-    const p=this.players;
+    const p=this.players.filter(x=>!x.spec);   // spectators never block or count toward a start
     if(p.length<2||!p.every(x=>x.rdy)) return;
     this.callStart();          // each client clears its own ready as it starts
   }
@@ -3995,6 +4017,16 @@ const UI = {
     if(READY_P2P.me&&READY_P2P.peer) startMatch();
   },
   peerReady(v){ READY_P2P.peer=v; this.renderRoom(); if(READY_P2P.me&&READY_P2P.peer) startMatch(); },
+  /* Sits out the next match rather than playing it — server rooms only;
+     P2P is always exactly the two people who set up the link, so there's
+     no one left to play against if either spectates. */
+  setSpectating(v){
+    if(!Room.on) return;
+    Room.set("spec",v);
+    const m=Room.me();
+    if(m){ m.spec=v; if(v){ m.rdy=false; Room.set("rdy",false); } }
+    this.renderRoom();
+  },
   renderRoom(){
     const host=$("#seatlist");
     if(!host) return;
@@ -4003,20 +4035,29 @@ const UI = {
     const players=inRoom?Room.players
       :(Net.ready()?[{pid:PID,n:CFG.name,rdy:READY_P2P.me,w:WINS_P2P.me},
                      {pid:"peer",n:Net.peerName||T("opponent"),rdy:READY_P2P.peer,w:WINS_P2P.peer}]:[]);
+    const active=players.filter(p=>!p.spec);
     const rows=players.map(p=>{
       const you=p.pid===PID;
-      return '<div class="seat-row'+(p.rdy?" ready":"")+(you?" mine":"")+'" data-pid="'+esc(p.pid)+'">'+
-        '<div class="nm">'+esc(p.n)+(you?" · "+esc(T("room_you")):"")+'</div>'+
+      return '<div class="seat-row'+(p.rdy?" ready":"")+(p.spec?" spectating":"")+(you?" mine":"")+'" data-pid="'+esc(p.pid)+'">'+
+        '<div class="nm">'+esc(p.n)+(you?" · "+esc(T("room_you")):"")+(p.spec?" · "+esc(T("room_spectating")):"")+'</div>'+
         '<div class="w">'+(p.w|0)+'<small>'+esc(T("room_wins"))+'</small></div></div>';
     });
     host.innerHTML=rows.join("");
 
+    const mySpec=!!(me&&me.spec);
     const btn=$("#b-ready");
     const mine=inRoom?!!(me&&me.rdy):READY_P2P.me;
-    if(btn){ btn.textContent=T(mine?"room_unready":"room_ready"); btn.classList.toggle("ready",mine); btn.disabled=players.length<2; }
+    if(btn){ btn.textContent=T(mine?"room_unready":"room_ready"); btn.classList.toggle("ready",mine); btn.disabled=active.length<2||mySpec; }
+
+    const specBtn=$("#b-spectate");
+    if(specBtn){
+      specBtn.hidden=!inRoom;
+      specBtn.textContent=T(mySpec?"room_unspectate":"room_spectate");
+      specBtn.classList.toggle("on",mySpec);
+    }
 
     const hint=$("#room-hint");
-    if(hint && hint.dataset.orig===undefined) hint.textContent = players.length<2 ? T("room_alone") : T("room_hint_n",{n:players.length});
+    if(hint && hint.dataset.orig===undefined) hint.textContent = active.length<2 ? T("room_alone") : T("room_hint_n",{n:active.length});
 
     this.paintRule();
     this.renderChat();
@@ -4165,6 +4206,11 @@ $("#b-ready").onclick=()=>{
   Sfx.ui();
   const m=Room.on?Room.me():null;
   UI.setReady(!(Room.on?!!(m&&m.rdy):READY_P2P.me));
+};
+$("#b-spectate").onclick=()=>{
+  Sfx.ui();
+  const m=Room.me();
+  UI.setSpectating(!(m&&m.spec));
 };
 $$(".rule").forEach(b=>b.onclick=()=>{ Sfx.ui(); UI.setRule(b.dataset.rule); });
 $("#b-leave").onclick=()=>{ Sfx.ui(); UI.leaveRoom(); };
