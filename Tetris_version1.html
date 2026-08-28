@@ -261,7 +261,7 @@ h3:first-of-type{margin-top:4px}
 .mi:focus-visible::after,.mi.on::after,.mi:active::after,.mi.lit::after{ opacity:1;transform:none; }
 @media (hover:hover){ .mi:hover::after{ opacity:1;transform:none; } }
 .mi .sub{display:none}
-.mi.ctr{text-align:center;width:100%}
+.mi.ctr{text-align:center;width:100%;max-width:440px}
 .mi.lang{text-transform:none}
 .mi.ghost{color:var(--fg-dim);font-weight:600;font-size:13.5px;padding:9px 14px}
 .mi[disabled]{opacity:.35;pointer-events:none}
@@ -299,6 +299,7 @@ input.tf,textarea.tf{
   background:var(--surface);color:var(--fg-dim);
 }
 textarea.tf{height:92px;resize:none;line-height:1.5}
+.tf.box{max-width:560px}
 input.tf:focus,textarea.tf:focus{outline:none;color:var(--fg);border-color:var(--line-strong)}
 .hint{font-size:13px;color:var(--fg-faint);line-height:1.7;margin:13px 0 0}
 
@@ -369,13 +370,13 @@ input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;bac
   .split.panel-open .panel-back{display:inline-block;margin-bottom:8px}
 }
 @media (min-width:760px){
-  #v-set .card,#v-lobby .card{width:min(760px,100%)}
+  #v-set .card,#v-lobby .card{width:min(1100px,92vw);margin-block:auto}
   .split{
     display:grid;grid-template-columns:180px 1fr;gap:8px 40px;align-items:center;
     height:min(620px,calc(100vh - 160px));overflow:hidden;
   }
   .split .panel-area{height:100%;overflow-y:auto}
-  #v-set .card{width:min(900px,100%);margin-block:auto}
+  #v-set .card{width:min(1300px,92vw)}
   #v-set .split,#v-lobby .split{grid-template-columns:280px 1fr}
 }
 
