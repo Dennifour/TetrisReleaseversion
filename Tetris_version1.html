@@ -426,12 +426,13 @@ html[lang=ko] .fold summary h3{letter-spacing:.02em}
 
 /* ---- versus room -------------------------------------------------------
    The narrow left-aligned .card left most of a wide screen blank, so this
-   screen doesn't use the shared --col cap at all: the rule picker sits top
-   of a half-width column pinned to the right edge, the seat list and ready
-   button center in the space left below it, and chat moves out of the flow
-   entirely into a corner FAB + its own popup. Seats are rows, a status
-   list rather than navigation, so they keep an at-rest border like the
-   lobby's .room-row. */
+   screen doesn't use the shared --col cap at all: the rule picker pins top
+   right, the seat list takes a half-width column on the left and centers
+   vertically in the space below the top edge, ready sits alone at bottom
+   center sized like the main menu's own nav text, and chat moves out of
+   the flow entirely into a corner FAB + its own popup. Seats are rows, a
+   status list rather than navigation, so they keep an at-rest border like
+   the lobby's .room-row. */
 #v-room .card{width:100%;max-width:none;position:relative}
 .room-leave{margin-bottom:14px}
 .seat-list{display:grid;gap:8px;width:100%}
@@ -451,21 +452,23 @@ html[lang=ko] .fold summary h3{letter-spacing:.02em}
 .rule-block .row{justify-content:flex-end}
 .rule-block .hint{text-align:right}
 .seat-col{display:flex;flex-direction:column;align-items:stretch;gap:14px;width:100%}
-#b-ready{width:auto;min-width:220px;margin-inline:auto;text-align:center;border:1.5px solid var(--line-strong)}
+#b-ready{width:auto;text-align:center;border:1.5px solid var(--line-strong)}
 #b-ready.ready{border-color:#4fe0a8;color:#4fe0a8}
 #b-ready.on::after,#b-ready:active::after{opacity:0}
 @media (min-width:760px){
   #v-room .card{height:calc(100vh - env(safe-area-inset-top) - 32px)}
-  .room-leave{position:absolute;left:0;top:0;margin:0}
-  .room-side{
-    position:absolute;top:0;right:0;bottom:0;
+  .room-leave{position:absolute;left:0;top:0;margin:0;z-index:1}
+  .rule-block{position:absolute;top:0;right:0;width:min(50%,640px)}
+  .seat-col{
+    position:absolute;top:0;left:0;bottom:0;
     width:min(50%,640px);
-    display:flex;flex-direction:column;
+    display:flex;flex-direction:column;justify-content:center;align-items:flex-start;
   }
-  .seat-col{flex:1;min-height:0;justify-content:center}
+  #b-ready{position:absolute;left:50%;bottom:max(24px,4vh);transform:translateX(-50%)}
 }
 @media (max-width:759px){
-  .room-side{display:flex;flex-direction:column;gap:22px}
+  .seat-col{display:flex;flex-direction:column;gap:22px}
+  #b-ready{width:100%}
 }
 
 /* Chat is a corner FAB + a popup, not part of the room's own flow — both
@@ -683,20 +686,18 @@ html[lang=ko] .fold summary h3{letter-spacing:.02em}
 <div class="veil" id="v-room">
   <div class="card">
     <button class="mi nav ghost room-leave" id="b-leave" data-i18n="room_leave"></button>
-    <div class="room-side">
-      <div class="rule-block">
-        <div class="row" id="rulerow">
-          <button class="mi ctr rule" type="button" data-rule="attack" data-i18n="rule_attack"></button>
-          <button class="mi ctr rule" type="button" data-rule="score" data-i18n="rule_score"></button>
-        </div>
-        <p class="hint" id="rule-hint"></p>
+    <div class="rule-block">
+      <div class="row" id="rulerow">
+        <button class="mi ctr rule" type="button" data-rule="attack" data-i18n="rule_attack"></button>
+        <button class="mi ctr rule" type="button" data-rule="score" data-i18n="rule_score"></button>
       </div>
-      <div class="seat-col">
-        <div class="seat-list" id="seatlist"></div>
-        <p class="hint" id="room-hint" data-i18n="room_hint"></p>
-        <button class="mi ready" id="b-ready" data-i18n="room_ready"></button>
-      </div>
+      <p class="hint" id="rule-hint"></p>
     </div>
+    <div class="seat-col">
+      <div class="seat-list" id="seatlist"></div>
+      <p class="hint" id="room-hint" data-i18n="room_hint"></p>
+    </div>
+    <button class="mi nav ready" id="b-ready" data-i18n="room_ready"></button>
   </div>
 
   <button class="chat-fab" id="b-chat-toggle" type="button" data-i18n-aria="chat_send">
