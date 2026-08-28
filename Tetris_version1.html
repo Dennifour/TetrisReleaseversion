@@ -290,6 +290,10 @@ h3:first-of-type{margin-top:4px}
 .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .mt8{margin-top:8px}.mt14{margin-top:14px}.mt16{margin-top:16px}
 .row>.mi{white-space:nowrap}
+/* A row of choice buttons (light/dark/system, en/한국어, …) shares the row's
+   width instead of each stacking full-width on its own line — still wraps
+   below its basis once the row itself runs out of room. */
+.row>.mi.ctr{width:auto;flex:1 1 120px}
 
 input.tf,textarea.tf{
   display:block;width:100%;
