@@ -21,6 +21,24 @@
   --accent:#ededf0;
   --danger:#e5484d;
   --radius:4px;
+  --radius-sm:10px;
+  --radius-full:999px;
+  --veil-rgb:10,10,12;
+}
+/* Light mode swaps every token above; nothing downstream reads a raw
+   colour, so this is the only place "light" is ever spelled out. */
+:root[data-ui-theme="light"]{
+  --bg:#ffffff;
+  --surface:#f6f6f7;
+  --surface-2:#eeeef0;
+  --line:rgba(0,0,0,.11);
+  --line-strong:rgba(0,0,0,.22);
+  --fg:#0b0b0d;
+  --fg-dim:#55555d;
+  --fg-faint:#83838b;
+  --accent:#0b0b0d;
+  --danger:#c8272f;
+  --veil-rgb:255,255,255;
 }
 
 *,*::before,*::after{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -70,19 +88,6 @@ body{
   opacity:0;transition:opacity .3s ease;
 }
 body.playing #bg{opacity:var(--bg-bright,.45)}
-
-/* A faint wash of whichever nav item is hovered or focused, felt through
-   the menu's own dark overlay rather than painted on top of it — the veil
-   sits above this at z-index 10 and its own 92%-opaque background does the
-   dimming, so this only ever needs to be a bright, fully-saturated radial
-   gradient. Two layers so switching from one item's colour to another's
-   cross-fades instead of popping. */
-#glow-a,#glow-b{
-  position:fixed;inset:-10%;z-index:9;pointer-events:none;
-  opacity:0;transition:opacity .5s ease;
-  background:radial-gradient(ellipse 55% 48% at 20% 42%,var(--gc,transparent) 0%,transparent 70%);
-}
-#glow-a.show,#glow-b.show{opacity:1}
 
 /* The corner icons share one row, so each one's place comes from the layout
    rather than from arithmetic that has to re-derive its neighbour's width. */
@@ -230,7 +235,7 @@ body.swap #act-wrap{transform:translate(calc(var(--shift-x,0px) * -1),var(--shif
   --col:min(460px,100%);         /* the column everything is measured on */
   position:fixed;inset:0;z-index:10;display:flex;justify-content:flex-start;
   padding:16px var(--edge);
-  background:rgba(10,10,12,.92);
+  background:rgba(var(--veil-rgb),.92);
   overflow:hidden auto;overscroll-behavior:contain;touch-action:pan-y;
   opacity:0;visibility:hidden;pointer-events:none;
   transition:opacity .18s ease .25s,visibility 0s .43s;
@@ -268,14 +273,14 @@ body.swap #act-wrap{transform:translate(calc(var(--shift-x,0px) * -1),var(--shif
 .veil:not(#v-pause).out .mi:nth-child(3){transition-delay:.29s}
 .veil:not(#v-pause).out .mi:nth-child(4){transition-delay:.31s}
 .brand{
-  font-weight:600;letter-spacing:.18em;text-align:left;color:var(--fg);
+  font-weight:700;letter-spacing:-.01em;text-align:left;color:var(--fg);
   font-size:clamp(24px,6.4vmin,40px);margin:0 0 20px;
-  line-height:1.28;
+  line-height:1.2;text-transform:lowercase;
 }
 #o-title{font-size:clamp(26px,7vmin,42px)}
-html[lang=ko] .brand{letter-spacing:.09em}
-html[lang=ko] .tag,html[lang=ko] h3,html[lang=ko] .netstat{letter-spacing:.04em}
-.tag{text-align:left;color:var(--fg-faint);font-size:12px;letter-spacing:.13em;margin:-14px 0 22px;text-transform:uppercase;line-height:1.5}
+html[lang=ko] .brand{letter-spacing:0}
+html[lang=ko] h3,html[lang=ko] .netstat{letter-spacing:.04em}
+.tag{text-align:left;color:var(--fg-dim);font-size:14.5px;letter-spacing:0;margin:-12px 0 22px;line-height:1.55}
 /* A heading is a label on the column, and draws no line of its own: the rows
    under it carry theirs, and a heading over a pair of buttons would only be
    ruling through them. */
@@ -289,72 +294,50 @@ h3:first-of-type{margin-top:4px}
 /* A slab that acts — copies, resets, readies, switches a setting — is a
    control, and controls stay on the column with everything else. */
 .mi{
-  position:relative;isolation:isolate;
+  position:relative;
   display:block;text-align:left;cursor:pointer;width:100%;
-  padding:15px 20px;border:0;border-radius:0;
-  background:var(--surface-2);color:var(--fg);
-  font-family:inherit;font-size:14.5px;font-weight:600;letter-spacing:.06em;
-  text-transform:uppercase;line-height:1.35;
-  transition:transform .22s cubic-bezier(.2,.85,.25,1);
+  padding:15px 20px;border:1px solid var(--line);border-radius:var(--radius-sm);
+  background:var(--surface);color:var(--fg);
+  font-family:inherit;font-size:14.5px;font-weight:600;letter-spacing:0;
+  line-height:1.35;text-transform:lowercase;
+  transition:background-color .15s ease,border-color .15s ease,color .15s ease,transform .15s ease;
 }
-/* The slab sets its own display, so hiding one needs saying twice. */
+/* The row sets its own display, so hiding one needs saying twice. */
 .mi[hidden]{display:none}
-/* A nav item is just its label: no slab, no tab hanging off the edge. It
-   sizes to its own text, lands on the same left edge as the headings above
-   it, and wears the colour of wherever it leads. */
-.mi.nav{
-  background:none;
-  width:fit-content;max-width:100%;justify-self:start;
-  padding:14px 20px;
-  font-size:clamp(15px,3.6vmin,18px);
-  color:var(--acc,var(--fg));
+.mi:hover{border-color:var(--line-strong);background:var(--surface-2)}
+.mi:focus-visible,.mi.on,.mi:active,.mi.lit{
+  outline:none;border-color:var(--fg);background:var(--surface-2);
 }
-/* Each destination carries its own colour. */
-.mi.nav[data-go="play"]    {--acc:#6fa8ff}
-.mi.nav[data-go="settings"]{--acc:#9aa3ad}
-.mi.nav[data-go="solo"]    {--acc:#4fd1ff}
-.mi.nav[data-go="sprint"]  {--acc:#4fe0a8}
-.mi.nav[data-go="speed"]   {--acc:#ffb84d}
-.mi.nav[data-go="versus"]  {--acc:#ff5d7a}
-.mi.nav[data-go="records"] {--acc:#c48bff}
-/* The fill is a white sheet blended by difference, so whatever it sweeps over
-   inverts with it. */
-.mi::after{
-  content:"";position:absolute;inset:0;pointer-events:none;
-  background:#fff;mix-blend-mode:difference;
-  transform:scaleX(0);transform-origin:left center;opacity:0;
-  transition:opacity .30s ease, transform 0s linear .30s;
-}
-/* A nav item swaps the sweep for a pill traced around its label — always
-   white, whatever the item's own colour is. */
-.mi.nav::after{
-  content:"";position:absolute;inset:-4px -14px;border-radius:999px;
-  background:none;mix-blend-mode:normal;border:1.5px solid #fff;
-  transform:scale(.96);opacity:0;
-  transition:opacity .18s ease,transform .18s cubic-bezier(.2,.9,.25,1);
-}
-.mi.nav:focus-visible::after,.mi.nav.on::after,.mi.nav:active::after,.mi.nav.lit::after{
-  transform:none;opacity:1;
-}
+.mi.nav{font-size:15px}
 .mi .sub{display:none}
 .mi.ctr{text-align:center}
 .mi.lang{text-transform:none}
-.mi.ghost{color:var(--fg-dim);padding:13px 20px;font-size:13px}
+/* Ghost is the quiet second action next to a real one: no fill of its own
+   until it's touched. */
+.mi.ghost{
+  background:transparent;border-color:var(--line);color:var(--fg-dim);
+  padding:13px 20px;font-size:13px;
+}
+.mi.ghost:hover{background:var(--surface);border-color:var(--line-strong);color:var(--fg)}
+.mi.ghost:focus-visible,.mi.ghost.on,.mi.ghost:active,.mi.ghost.lit{
+  background:var(--surface);border-color:var(--line-strong);color:var(--fg);
+}
 .mi.nav.ghost{padding:12px 18px;font-size:clamp(12.5px,2.9vmin,14px)}
+/* The one or two buttons that are the point of the screen — solid and
+   outline, the pair every reference used for its hero actions. */
+.mi.cta.primary{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.mi.cta.primary:hover,.mi.cta.primary:focus-visible,.mi.cta.primary:active{
+  background:var(--fg);color:var(--bg);border-color:var(--fg);opacity:.88;
+}
+.mi.cta.secondary{background:transparent;color:var(--fg);border-color:var(--line-strong)}
+.mi.cta.secondary:hover,.mi.cta.secondary:focus-visible,.mi.cta.secondary:active{
+  background:var(--surface);border-color:var(--line-strong);color:var(--fg);
+}
 .mi[disabled]{opacity:.35;pointer-events:none}
 /* A guest cannot pick the match, but still has to be able to read which one it is. */
 .mi.ctr[disabled].on{opacity:.9}
-.mi:focus-visible,.mi.on,.mi:active{outline:none}
-.mi:focus-visible::after,.mi.on::after,.mi:active::after,.mi.lit::after{
-  transform:scaleX(1);opacity:1;
-  transition:transform .22s cubic-bezier(.12,.95,.3,1), opacity 0s;
-}
-.mi:focus-visible{transform:translateX(9px)}
 @media (hover:hover){
-  .mi:hover{transform:translateX(9px)}
-  .mi:hover::after{transform:scaleX(1);opacity:1;
-    transition:transform .22s cubic-bezier(.12,.95,.3,1), opacity 0s}
-  .mi.nav:hover::after{transform:none;opacity:1}
+  .mi.cta:hover{transform:translateY(-1px)}
 }
 
 
@@ -362,7 +345,8 @@ h3:first-of-type{margin-top:4px}
 .recs{display:grid;gap:7px}
 .rec{
   display:flex;align-items:baseline;justify-content:space-between;gap:16px;
-  background:var(--surface-2);padding:18px 20px;
+  background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-sm);
+  padding:18px 20px;
 }
 .rec .k{
   font-size:12px;letter-spacing:.13em;text-transform:uppercase;
@@ -652,9 +636,7 @@ html[lang=ko] .fold summary h3{letter-spacing:.02em}
 
 /* Kept last: equal specificity is settled by source order. */
 @media (prefers-reduced-motion:reduce){
-  .veil,.veil .card,.mi,.mi::after,
-  .mi:focus-visible::after,.mi.on::after,.mi:active::after,.mi.lit::after,
-  .mi:hover::after,#glow-a,#glow-b{transition-duration:.01ms;transition-delay:0s}
+  .veil,.veil .card,.mi{transition-duration:.01ms;transition-delay:0s}
   .veil.fwd .card,.veil.out .mi{transition-duration:.01ms;transition-delay:0s}
   .panel.on{animation-duration:.01ms}
   .tab::after{transition-duration:.01ms}
@@ -678,8 +660,6 @@ html[lang=ko] .fold summary h3{letter-spacing:.02em}
 </div>
 
 <div id="bg"></div>
-<div id="glow-a" aria-hidden="true"></div>
-<div id="glow-b" aria-hidden="true"></div>
 <div id="stage">
   <div id="screen"><canvas id="cv"></canvas></div>
 
@@ -707,9 +687,9 @@ html[lang=ko] .fold summary h3{letter-spacing:.02em}
 
 <div class="veil on" id="v-menu">
   <div class="card">
-    <div class="menu">
-      <button class="mi nav" data-go="play"><span data-i18n="m_play"></span><span class="sub" data-i18n="m_play_s"></span></button>
-      <button class="mi nav" data-go="settings"><span data-i18n="m_settings"></span><span class="sub" data-i18n="m_settings_s"></span></button>
+    <div class="row">
+      <button class="mi nav cta primary" data-go="play"><span data-i18n="m_play"></span><span class="sub" data-i18n="m_play_s"></span></button>
+      <button class="mi nav cta secondary" data-go="settings"><span data-i18n="m_settings"></span><span class="sub" data-i18n="m_settings_s"></span></button>
     </div>
   </div>
 </div>
@@ -994,6 +974,12 @@ html[lang=ko] .fold summary h3{letter-spacing:.02em}
     </section>
 
     <section class="panel" data-panel="video" role="tabpanel">
+      <h3 data-i18n="set_appearance"></h3>
+      <div class="row">
+        <button class="mi ctr uitheme" type="button" data-uitheme="light" data-i18n="set_light"></button>
+        <button class="mi ctr uitheme" type="button" data-uitheme="dark" data-i18n="set_dark"></button>
+        <button class="mi ctr uitheme" type="button" data-uitheme="system" data-i18n="set_system"></button>
+      </div>
       <h3 data-i18n="set_theme"></h3>
       <div class="row">
         <button class="mi ctr theme" type="button" data-theme="default" data-i18n="theme_default"></button>
@@ -1033,7 +1019,7 @@ html[lang=ko] .fold summary h3{letter-spacing:.02em}
     <h1 class="brand" id="ask-t">—</h1>
     <p class="tag" id="ask-s">—</p>
     <div class="menu">
-      <button class="mi nav" id="ask-yes" data-i18n="yes"></button>
+      <button class="mi nav cta primary" id="ask-yes" data-i18n="yes"></button>
       <button class="mi nav ghost" id="ask-no" data-i18n="no"></button>
     </div>
   </div>
@@ -1044,7 +1030,7 @@ html[lang=ko] .fold summary h3{letter-spacing:.02em}
     <h1 class="brand" data-i18n="pause_t"></h1>
     <p class="tag" id="p-sub">Take a breath</p>
     <div class="menu">
-      <button class="mi nav" id="b-resume" data-i18n="pause_resume"></button>
+      <button class="mi nav cta primary" id="b-resume" data-i18n="pause_resume"></button>
       <button class="mi nav ghost" id="b-restart" data-i18n="pause_restart"></button>
       <button class="mi nav ghost" id="b-quit" data-i18n="pause_quit"></button>
     </div>
@@ -1057,7 +1043,7 @@ html[lang=ko] .fold summary h3{letter-spacing:.02em}
     <p class="tag" id="o-sub">—</p>
     <div id="o-stats"></div>
     <div class="menu mt16">
-      <button class="mi nav" id="b-again"><span id="again-l">PLAY AGAIN</span></button>
+      <button class="mi nav cta primary" id="b-again"><span id="again-l">PLAY AGAIN</span></button>
       <button class="mi nav ghost" id="b-menu2" data-i18n="menu"></button>
     </div>
   </div>
@@ -1112,6 +1098,7 @@ const CFG = {
   ghost: store.get("ghost",true),
   grid:  store.get("grid",false),       // the well's cell grid
   theme: store.get("theme","default"),
+  uiTheme: store.get("uiTheme","dark"),   // light | dark | system — the menu chrome, not the board
   bgBright: store.get("bgBright",45),   // % opacity the active theme's background shows at
   swap:  store.get("swap",false),
   btnScale: store.get("btnScale",1),
@@ -1159,6 +1146,18 @@ function applyBg(){
   $("#bg").style.backgroundImage = THEME.background ? "url("+THEME.background+")" : "none";
   document.documentElement.style.setProperty("--bg-bright", CFG.bgBright/100);
 }
+
+/* The menu chrome's own light/dark, independent of the board's THEME above —
+   "system" is resolved against the OS preference and kept in sync with it. */
+const PREFERS_LIGHT = matchMedia("(prefers-color-scheme: light)");
+function applyUiTheme(){
+  const resolved = CFG.uiTheme==="system" ? (PREFERS_LIGHT.matches?"light":"dark") : CFG.uiTheme;
+  document.documentElement.setAttribute("data-ui-theme",resolved);
+  const mc=$('meta[name="theme-color"]');
+  if(mc) mc.content = resolved==="light" ? "#ffffff" : "#05060f";
+}
+PREFERS_LIGHT.addEventListener("change",()=>{ if(CFG.uiTheme==="system") applyUiTheme(); });
+applyUiTheme();
 
 /* Personal bests, kept on this device only. Marathon counts every run, since
    topping out is how it ends; sprint only counts a finished 40. */
@@ -1377,6 +1376,10 @@ const I18N = {
   pv_out:["toward the edges","바깥쪽"],
   pv_in:["toward the screen","화면쪽"],
   pv_default:["default","기본"],
+  set_appearance:["Appearance","외관"],
+  set_light:["Light","라이트"],
+  set_dark:["Dark","다크"],
+  set_system:["System","시스템"],
   set_pres:["Presentation","화면"],
   set_sound:["Sound","소리"],
   set_snd:["Sound effects","효과음"],
@@ -4114,24 +4117,6 @@ const PARENT = {
 /* Leaving one of these drops whatever handshake it was holding. */
 const NET_SCREENS = {"#v-online":1,"#v-host":1,"#v-join":1};
 
-/* Each destination's colour, echoed from its --acc in CSS, washed faintly
-   across the whole screen while its nav item is hovered or focused. Two
-   layers so leaving one colour for another cross-fades instead of popping. */
-const ACCENTS = {
-  play:"111,168,255", settings:"154,163,173", solo:"79,209,255",
-  sprint:"79,224,168", speed:"255,184,77", versus:"255,93,122", records:"196,139,255"
-};
-const GLOW=[$("#glow-a"),$("#glow-b")];
-let glowOn=0;
-function glow(rgb){
-  if(!rgb){ GLOW[0].classList.remove("show"); GLOW[1].classList.remove("show"); return; }
-  const next=1-glowOn;
-  GLOW[next].style.setProperty("--gc","rgb("+rgb+")");
-  GLOW[next].classList.add("show");
-  GLOW[glowOn].classList.remove("show");
-  glowOn=next;
-}
-
 const UI = {
   stack:[], rev:false,
   cur:"#v-menu",
@@ -4140,7 +4125,6 @@ const UI = {
      fading up through one still leaving is unreadable — so the arrival waits
      for the exit to finish. */
   show(id,inner){
-    glow(null);
     const from=this.cur;
     if(id && from && id!==from){
       const rev=this.rev;              // the exit consumes it; the arrival needs it too
@@ -4355,7 +4339,7 @@ const UI = {
       paintPad();
       requestAnimationFrame(renderPreview);
     }
-    if(name==="video") paintTheme();
+    if(name==="video"){ paintTheme(); paintUiTheme(); }
     if(name==="audio") repaintSettings();
   },
 
@@ -4735,26 +4719,17 @@ document.addEventListener("pointerdown",e=>{
   el._lit=setTimeout(()=>el.classList.remove("lit"),500);
 },true);
 
-$$("[data-go]").forEach(b=>{
-  b.onclick=()=>{
-    Sfx.unlock(); Sfx.ui();
-    const go=b.dataset.go;
-    if(go==="solo"||go==="sprint"){ UI.closeAll(); afterScreen(()=>startGame(go)); }
-    else if(go==="versus"){ Net.reset(); Who.start(); UI.show("#v-lobby"); }
-    else if(go==="speed") UI.show("#v-speed");
-    else if(go==="records") UI.showRecords();
-    else if(go==="play") UI.show("#v-play");
-    else if(go==="server") UI.show("#v-server");
-    else if(go==="p2p"){ Net.reset(); UI.show("#v-p2p"); }
-    else if(go==="settings") UI.openSettings();
-  };
-  const rgb=ACCENTS[b.dataset.go];
-  if(rgb){
-    b.addEventListener("mouseenter",()=>glow(rgb));
-    b.addEventListener("mouseleave",()=>{ if(document.activeElement!==b) glow(null); });
-    b.addEventListener("focus",()=>glow(rgb));
-    b.addEventListener("blur",()=>{ if(!b.matches(":hover")) glow(null); });
-  }
+$$("[data-go]").forEach(b=>b.onclick=()=>{
+  Sfx.unlock(); Sfx.ui();
+  const go=b.dataset.go;
+  if(go==="solo"||go==="sprint"){ UI.closeAll(); afterScreen(()=>startGame(go)); }
+  else if(go==="versus"){ Net.reset(); Who.start(); UI.show("#v-lobby"); }
+  else if(go==="speed") UI.show("#v-speed");
+  else if(go==="records") UI.showRecords();
+  else if(go==="play") UI.show("#v-play");
+  else if(go==="server") UI.show("#v-server");
+  else if(go==="p2p"){ Net.reset(); UI.show("#v-p2p"); }
+  else if(go==="settings") UI.openSettings();
 });
 $$("[data-back]").forEach(b=>b.onclick=()=>{ Sfx.ui(); UI.back("#"+b.closest(".veil").id); });
 
@@ -4997,6 +4972,17 @@ $$(".theme").forEach(b=>b.onclick=()=>{
   CFG.theme=b.dataset.theme; saveCfg();
   applyTheme(); paintTheme();
 });
+$$(".uitheme").forEach(b=>b.onclick=()=>{
+  if(CFG.uiTheme===b.dataset.uitheme) return;
+  Sfx.ui();
+  CFG.uiTheme=b.dataset.uitheme; saveCfg();
+  applyUiTheme(); paintUiTheme();
+});
+function paintUiTheme(){
+  $$(".uitheme").forEach(b=>b.classList.toggle("on",b.dataset.uitheme===CFG.uiTheme));
+}
+paintUiTheme();
+
 function paintTheme(){
   $$(".theme").forEach(b=>b.classList.toggle("on",b.dataset.theme===CFG.theme));
   const el=$("#theme-hint");
