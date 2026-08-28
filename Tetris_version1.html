@@ -242,12 +242,22 @@ h3:first-of-type{margin-top:4px}
   content:"";position:absolute;inset:0;border-radius:999px;
   border:1.5px solid #fff;pointer-events:none;
   opacity:0;transform:scale(.94);
-  transition:opacity .16s ease,transform .16s cubic-bezier(.2,.9,.25,1);
 }
 :root[data-ui-theme="light"] .mi::after{border-color:#000}
 .mi:focus-visible,.mi.on,.mi:active,.mi.lit{ outline:none; }
-.mi:focus-visible::after,.mi.on::after,.mi:active::after,.mi.lit::after{ opacity:1;transform:none; }
-@media (hover:hover){ .mi:hover::after{ opacity:1;transform:none; } }
+/* The transition lives only on the "on" state, not the rest state above:
+   fading in still animates, but losing hover/focus snaps the pill away
+   instantly instead of lingering while it fades out. */
+.mi:focus-visible::after,.mi.on::after,.mi:active::after,.mi.lit::after{
+  opacity:1;transform:none;
+  transition:opacity .16s ease,transform .16s cubic-bezier(.2,.9,.25,1);
+}
+@media (hover:hover){
+  .mi:hover::after{
+    opacity:1;transform:none;
+    transition:opacity .16s ease,transform .16s cubic-bezier(.2,.9,.25,1);
+  }
+}
 .mi .sub{display:none}
 .mi.ctr{text-align:center;width:100%;max-width:440px}
 .mi.lang{text-transform:none}
