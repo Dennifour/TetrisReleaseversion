@@ -256,17 +256,15 @@ h3:first-of-type{margin-top:4px}
 }
 :root[data-ui-theme="light"] .mi::after{border-color:#000}
 .mi:focus-visible,.mi.on,.mi:active,.mi.lit{ outline:none; }
-/* The transition lives only on the "on" state, not the rest state above:
-   fading in still animates, but losing hover/focus snaps the pill away
-   instantly instead of lingering while it fades out. */
+/* No transition here: with a fade-in, the incoming pill and the outgoing
+   one's still-visible tail overlap on screen whenever selection moves
+   straight from one item to another, so both must snap. */
 .mi:focus-visible::after,.mi.on::after,.mi:active::after,.mi.lit::after{
   opacity:1;transform:none;
-  transition:opacity .16s ease,transform .16s cubic-bezier(.2,.9,.25,1);
 }
 @media (hover:hover){
   .mi:hover::after{
     opacity:1;transform:none;
-    transition:opacity .16s ease,transform .16s cubic-bezier(.2,.9,.25,1);
   }
 }
 .mi .sub{display:none}
