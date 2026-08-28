@@ -3399,7 +3399,13 @@ const Room = {
     if(!this.on) return;
     const t=String(text).slice(0,120);
     if(!t.trim()) return;
-    FB.put(this.path()+"/c/"+Date.now()+"-"+PID,{n:CFG.name,m:t}).catch(()=>{});
+    const key=Date.now()+"-"+PID;
+    // Echoed locally rather than waiting on a poll to read the write back —
+    // poll() folds this in (matched by key) once the server confirms it, and
+    // drops it if it's still unconfirmed after a room's worth of history.
+    this.chat=this.chat.concat([{key,n:CFG.name,m:t}]).slice(-CHAT_KEEP);
+    UI.renderChat();
+    FB.put(this.path()+"/c/"+key,{n:CFG.name,m:t}).catch(()=>{});
   },
 
   /* The host is the one that calls the start, so four clients cannot each
@@ -3441,7 +3447,6 @@ const Room = {
         .sort((a,b)=>a.j-b.j||(a.pid<b.pid?-1:1));
 
       if(!list.some(p=>p.pid===PID)){ UI.roomGone(); return; }   // dropped, or the room was taken down
-      const grew=list.length!==this.players.length;
       this.players=list;
 
       /* Only the host calls a start, and a room whose host went without taking
@@ -3479,12 +3484,21 @@ const Room = {
          under one already passed and never been heard from again. */
       if(v.c){
         const keys=Object.keys(v.c).sort((a,b)=>parseInt(a,10)-parseInt(b,10));
-        this.chat=keys.slice(-CHAT_KEEP).map(k=>({
-          n:String((v.c[k]||{}).n||"").slice(0,12), m:String((v.c[k]||{}).m||"").slice(0,120)
+        const confirmed=keys.slice(-CHAT_KEEP).map(k=>({
+          key:k, n:String((v.c[k]||{}).n||"").slice(0,12), m:String((v.c[k]||{}).m||"").slice(0,120)
         }));
+        // A message said locally via say() is in this.chat the instant it's
+        // sent — the write to confirm it just hasn't round-tripped through a
+        // poll yet. Keep it in place rather than dropping it back out until
+        // it shows up here under its own key.
+        const confirmedKeys=new Set(keys);
+        const stillMine=this.chat.filter(c=>c.key && !confirmedKeys.has(c.key));
+        this.chat=confirmed.concat(stillMine)
+          .sort((a,b)=>parseInt(a.key,10)-parseInt(b.key,10))
+          .slice(-CHAT_KEEP);
         if(this.host && keys.length>CHAT_KEEP)
           keys.slice(0,keys.length-CHAT_KEEP).forEach(k=>FB.del(this.path()+"/c/"+k));
-      }else this.chat=[];
+      }else this.chat=this.chat.filter(c=>c.key);
 
       if(v.go && v.go.at && v.go.at!==this.lastGo){
         this.lastGo=v.go.at;
@@ -3499,7 +3513,10 @@ const Room = {
       }
 
       mirrorFoes(this.others().filter(p=>this.inRound(p)));
-      if(grew) UI.renderRoom();
+      /* Every poll, not just when someone joins or leaves — a seat's ready
+         flag or a new chat line changes without the roster's length
+         changing at all, and the room screen needs to pick both up. */
+      UI.renderRoom();
       if(G && G.mode==="versus" && !G.over) checkLastStanding();
       if(this.host) this.maybeStart();
     }catch(e){ /* one dropped poll is not a lost room */ }
