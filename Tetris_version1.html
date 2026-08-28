@@ -180,6 +180,12 @@ body.swap #act-wrap{transform:translate(calc(var(--shift-x,0px) * -1),var(--shif
   --edge:max(16px,5vw);
   --col:min(460px,100%);
   position:fixed;inset:0;z-index:10;display:flex;justify-content:flex-start;
+  /* Explicit height, not just inset's implied bottom:0 — on mobile this
+     tracks the visual viewport (set in JS), which shrinks when the
+     on-screen keyboard opens, so a focused field low in the screen (like
+     chat) scrolls into the now-correctly-sized box instead of ending up
+     behind the keyboard. */
+  height:var(--vvh,100dvh);
   padding:calc(env(safe-area-inset-top) + 16px) var(--edge) 16px;
   background:rgba(10,10,12,.94);
   overflow:hidden auto;overscroll-behavior:contain;touch-action:pan-y;
@@ -442,12 +448,12 @@ html[lang=ko] .fold summary h3{letter-spacing:.02em}
 }
 .seat-row.mine{border-color:var(--line-strong)}
 .seat-row.ready{border-color:#4fe0a8}
-.seat-row.empty{border-style:dashed;color:var(--fg-faint)}
 .seat-row .w{font-size:19px;font-weight:700;font-variant-numeric:tabular-nums}
 .seat-row .w small{margin-left:6px;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--fg-faint);font-weight:600}
 .seat-row .nm{font-size:13.5px;font-weight:600;color:var(--fg-dim)}
 .seat-row.ready .nm{color:#4fe0a8}
 .rule-block{display:flex;flex-direction:column;align-items:flex-start;gap:6px}
+.rule-block .row{width:100%}
 .seat-col{display:flex;flex-direction:column;align-items:stretch;gap:14px;width:100%}
 #b-ready{width:auto;align-self:center;text-align:center;border:1.5px solid var(--line-strong);padding-inline:.4em}
 #b-ready.ready{border-color:#4fe0a8;color:#4fe0a8}
@@ -4066,15 +4072,12 @@ const UI = {
     const players=inRoom?Room.players
       :(Net.ready()?[{pid:PID,n:CFG.name,rdy:READY_P2P.me,w:WINS_P2P.me},
                      {pid:"peer",n:Net.peerName||T("opponent"),rdy:READY_P2P.peer,w:WINS_P2P.peer}]:[]);
-    const rows=[];
-    for(let i=0;i<MAX_SEATS;i++){
-      const p=players[i];
-      if(!p){ rows.push('<div class="seat-row empty"></div>'); continue; }
+    const rows=players.map(p=>{
       const you=p.pid===PID;
-      rows.push('<div class="seat-row'+(p.rdy?" ready":"")+(you?" mine":"")+'" data-pid="'+esc(p.pid)+'">'+
+      return '<div class="seat-row'+(p.rdy?" ready":"")+(you?" mine":"")+'" data-pid="'+esc(p.pid)+'">'+
         '<div class="nm">'+esc(p.n)+(you?" · "+esc(T("room_you")):"")+'</div>'+
-        '<div class="w">'+(p.w|0)+'<small>'+esc(T("room_wins"))+'</small></div></div>');
-    }
+        '<div class="w">'+(p.w|0)+'<small>'+esc(T("room_wins"))+'</small></div></div>';
+    });
     host.innerHTML=rows.join("");
 
     const btn=$("#b-ready");
@@ -4578,6 +4581,21 @@ function layout(){
 addEventListener("resize",layout);
 addEventListener("orientationchange",()=>{ layout(); setTimeout(layout,180); });
 if(window.visualViewport) visualViewport.addEventListener("resize",layout);
+
+/* --vvh tracks the visual viewport, not the layout one, so .veil (menus,
+   including the versus room's chat) actually shrinks when the on-screen
+   keyboard opens instead of staying sized to the space the keyboard now
+   covers. */
+function setVVH(){
+  const h=window.visualViewport?window.visualViewport.height:innerHeight;
+  document.documentElement.style.setProperty("--vvh",h+"px");
+}
+setVVH();
+addEventListener("resize",setVVH);
+if(window.visualViewport) visualViewport.addEventListener("resize",setVVH);
+$("#chat-in").addEventListener("focus",()=>{
+  setTimeout(()=>$("#chat-in").scrollIntoView({block:"center",behavior:"smooth"}),60);
+});
 
 $("#pausebtn").addEventListener("click",e=>{ e.preventDefault(); e.stopPropagation(); UI.togglePause(); });
 $("#pausebtn").addEventListener("pointerdown",e=>e.stopPropagation());
