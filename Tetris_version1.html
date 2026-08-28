@@ -4051,7 +4051,10 @@ const UI = {
 
     const specBtn=$("#b-spectate");
     if(specBtn){
-      specBtn.hidden=!inRoom;
+      // Nothing to spectate before this room has ever called a match — shown
+      // once Room.lastGo is set, which a fresh join also picks up immediately
+      // if it arrives mid-match (see Room.join()'s comment on arriving late).
+      specBtn.hidden=!inRoom||!Room.lastGo;
       specBtn.textContent=T(mySpec?"room_unspectate":"room_spectate");
       specBtn.classList.toggle("on",mySpec);
     }
