@@ -4108,12 +4108,26 @@ const UI = {
   }
 };
 
+/* Picking one of several .mi buttons waits for "click" to fire — but a
+   button's own pill shows on press, before click, so a quick tap onto a
+   *different* button was showing that button's press-pill next to the
+   still-.on pill of whichever one was picked last, until the click event
+   finally caught up and moved "on" over. Firing on pointerdown instead
+   moves "on" at the same moment the pressed button's own pill appears,
+   so there's never a frame with two pills lit. "click" is kept as a
+   fallback for keyboard activation, which has no pointerdown to catch it. */
+function onSelect(el,fn){
+  let pressedAt=0;
+  el.addEventListener("pointerdown",e=>{ pressedAt=e.timeStamp; fn(); });
+  el.addEventListener("click",e=>{ if(e.timeStamp-pressedAt>500) fn(); });
+}
+
 /* A rail/panel split behaves the same way in Settings and the lobby: pick
    an item, its panel opens (mobile: replaces the list; wide: already
    beside it), the small back link only ever needs to clear one class. */
 function splitSelect(splitId,itemSel,groupAttr){
   const root=$(splitId);
-  root.querySelectorAll(itemSel).forEach(b=>b.addEventListener("click",()=>{
+  root.querySelectorAll(itemSel).forEach(b=>onSelect(b,()=>{
     Sfx.ui();
     root.querySelectorAll(itemSel).forEach(o=>o.classList.toggle("on",o===b));
     root.querySelectorAll(".panel-area>[data-panel]").forEach(p=>p.classList.toggle("on",p.dataset.panel===b.dataset[groupAttr]));
@@ -4187,7 +4201,7 @@ $("#b-spectate").onclick=()=>{
   const m=Room.me();
   UI.setSpectating(!(m&&m.spec));
 };
-$$(".rule").forEach(b=>b.onclick=()=>{ Sfx.ui(); UI.setRule(b.dataset.rule); });
+$$(".rule").forEach(b=>onSelect(b,()=>{ Sfx.ui(); UI.setRule(b.dataset.rule); }));
 $("#b-leave").onclick=()=>{ Sfx.ui(); UI.leaveRoom(); };
 
 /* pause menu */
@@ -4241,11 +4255,11 @@ function repaintSettings(){ rangePainters.forEach(p=>p()); }
 
 /* Which panel settings opens on, remembered for as long as the page lives. */
 let TAB="general";
-$$("#set-rail [data-tab]").forEach(b=>b.onclick=()=>{
+$$("#set-rail [data-tab]").forEach(b=>onSelect(b,()=>{
   Sfx.ui();
   UI.openTab(b.dataset.tab);
   $("#set-split").classList.add("panel-open");
-});
+}));
 $("#set-panelback").onclick=()=>{ Sfx.ui(); $("#set-split").classList.remove("panel-open"); };
 
 /* <details> puts its block on screen the instant it opens, with no height to
@@ -4337,12 +4351,12 @@ function bindRows(host,which){
   });
 }
 
-$$(".uitheme").forEach(b=>b.onclick=()=>{
+$$(".uitheme").forEach(b=>onSelect(b,()=>{
   if(CFG.uiTheme===b.dataset.uitheme) return;
   Sfx.ui();
   CFG.uiTheme=b.dataset.uitheme; saveCfg();
   applyUiTheme(); applyTheme(); paintUiTheme();
-});
+}));
 function paintUiTheme(){
   $$(".uitheme").forEach(b=>b.classList.toggle("on",b.dataset.uitheme===CFG.uiTheme));
 }
@@ -4356,11 +4370,11 @@ function paintBg(){
 }
 bindRange("#s-bg","bgBright","#l-bg",v=>v+"%",applyBg);
 
-$$(".tmode").forEach(b=>b.onclick=()=>{
+$$(".tmode").forEach(b=>onSelect(b,()=>{
   Sfx.ui();
   CFG.touch=b.dataset.touch; CFG.touchSet=true; saveCfg();
   applyTouchMode(); paintTouch();
-});
+}));
 function paintTouch(){
   $$(".tmode").forEach(b=>b.classList.toggle("on",b.dataset.touch===CFG.touch));
   const dpad=CFG.touch==="dpad", swipe=CFG.touch==="swipe";
@@ -4388,11 +4402,11 @@ $("#b-keyreset").onclick=()=>{ Sfx.ui(); CFG.keys=fillBinds(null,KEYS_DEFAULT); 
 $("#b-padreset").onclick=()=>{ Sfx.ui(); CFG.pads=fillBinds(null,PADS_DEFAULT); saveCfg(); bindRows("#padlist","pads"); };
 
 $$(".lang").forEach(b=>{
-  b.onclick=()=>{
+  onSelect(b,()=>{
     if(CFG.lang===b.dataset.lang) return;
     CFG.lang=b.dataset.lang; saveCfg(); Sfx.ui();
     applyLang();
-  };
+  });
 });
 
 [["#s-snd","snd"],["#s-bob","bob"],["#s-ghost","ghost"],
