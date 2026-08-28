@@ -692,11 +692,6 @@ html[lang=ko] .fold summary h3{letter-spacing:.02em}
             <button class="mi ctr uitheme" type="button" data-uitheme="dark" data-i18n="set_dark"></button>
             <button class="mi ctr uitheme" type="button" data-uitheme="system" data-i18n="set_system"></button>
           </div>
-          <h3 data-i18n="set_theme"></h3>
-          <div class="row">
-            <button class="mi ctr theme" type="button" data-theme="default" data-i18n="theme_default"></button>
-          </div>
-          <p class="hint" id="theme-hint"></p>
           <h3 data-i18n="set_pres"></h3>
           <div class="opts">
             <div class="sp"><span data-i18n="set_ghost"></span><div class="sw on" id="s-ghost"></div></div>
@@ -1156,7 +1151,6 @@ const I18N = {
   set_swmove:["Drag to move one cell","한 칸 이동 거리"],
   set_swreset:["RESET SENSITIVITY","감도 초기화"],
   set_system:["System","시스템"],
-  set_theme:["Theme","테마"],
   set_vol:["Volume","음량"],
   sp_easy:["EASY","쉬움"],
   sp_hard:["HARD","어려움"],
@@ -1174,8 +1168,6 @@ const I18N = {
   st_relayed:["RELAYED","중계 연결"],
   st_waiting:["WAITING FOR A CODE","코드 기다리는 중"],
   status:["STATUS","상태"],
-  theme_default:["Default","기본"],
-  theme_default_s:["The board as it's always looked — no background, the system font, and the classic tiles.","지금까지의 기본 모습입니다 — 배경 없이, 시스템 글꼴과 클래식 블록을 사용합니다."],
   u_cellpct:["{v}% of a cell","한 칸의 {v}%"],
   u_cps:["{v} cells/sec","초당 {v}칸"],
   u_flick:["{v} — {n}","{v} — {n}"],
@@ -4102,7 +4094,7 @@ const UI = {
     $$("#set-rail [data-tab]").forEach(b=>b.classList.toggle("on",b.dataset.tab===name));
     $$("#v-set .panel").forEach(p=>p.classList.toggle("on",p.dataset.panel===name));
     if(name==="controls"){ repaintSettings(); paintTouch(); bindRows("#keylist","keys"); bindRows("#padlist","pads"); paintPad(); }
-    if(name==="video"){ paintTheme(); paintUiTheme(); }
+    if(name==="video"){ paintBg(); paintUiTheme(); }
     if(name==="audio") repaintSettings();
   },
 
@@ -4348,12 +4340,6 @@ function bindRows(host,which){
   });
 }
 
-$$(".theme").forEach(b=>b.onclick=()=>{
-  if(CFG.theme===b.dataset.theme) return;
-  Sfx.ui();
-  CFG.theme=b.dataset.theme; saveCfg();
-  applyTheme(); paintTheme();
-});
 $$(".uitheme").forEach(b=>b.onclick=()=>{
   if(CFG.uiTheme===b.dataset.uitheme) return;
   Sfx.ui();
@@ -4365,10 +4351,7 @@ function paintUiTheme(){
 }
 paintUiTheme();
 
-function paintTheme(){
-  $$(".theme").forEach(b=>b.classList.toggle("on",b.dataset.theme===CFG.theme));
-  const el=$("#theme-hint");
-  if(el) el.textContent=T("theme_"+CFG.theme+"_s");
+function paintBg(){
   const on=!!THEME.background;
   $("#bg-brightrow").hidden=!on;
   const bg=$("#bg-hint");
