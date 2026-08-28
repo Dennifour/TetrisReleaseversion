@@ -1400,43 +1400,17 @@ function traceOutline(cells){
 const OUTLINE = {};
 for(const t of TYPES) OUTLINE[t]=CELLS[t].map(traceOutline);
 
-/* Classic guideline colours: one fixed colour per piece type rather than a
-   shared, level-cycling three-tile skin — I is always cyan, O always
-   yellow, and so on, for the whole run. Garbage stays a neutral grey so a
-   row you were given never reads as a row you placed. */
+/* One fixed colour per piece type, held at the same soft, medium-high
+   saturation the rest of the UI uses for its own accent (the ready
+   seat's mint, #4fe0a8) rather than the fully-saturated "candy" hues
+   most Tetris skins reach for — seven flavours of one considered
+   palette instead of seven unrelated bright colours. Garbage stays a
+   neutral grey so a row you were given never reads as a row you
+   placed. */
 const PIECE_COLOR = {
-  I:"#00e0e8", O:"#f0d000", T:"#a000e0", S:"#00c000",
-  Z:"#e02020", J:"#2040e0", L:"#f09000", G:"#4a4a4a"
+  I:"#4fd0e0", O:"#e0c94f", T:"#a86fe0", S:"#4fe07a",
+  Z:"#e0625f", J:"#5f8fe0", L:"#e0954f", G:"#5a5a5a"
 };
-/* The glossy, beveled block every Tetris skin from the NES ports on has
-   used: a flat fill lit from the top-left — bright sheen fading through
-   the face to a shadow at the bottom-right corner — plus a small brighter
-   highlight let into the top-left, like light catching a plastic tile.
-   One tile per colour is pre-rendered into an offscreen canvas here, once,
-   or the frame drawing every cell would each be building its own
-   gradient — block() below just scales the finished tile onto the well
-   with drawImage, which is cheap regardless of how many cells it repaints. */
-const BLOCK_TILE = {};
-(function(){
-  const n=48;
-  for(const t in PIECE_COLOR){
-    const c=document.createElement("canvas");
-    c.width=c.height=n;
-    const tc=c.getContext("2d");
-    tc.fillStyle=PIECE_COLOR[t];
-    tc.fillRect(0,0,n,n);
-    const grad=tc.createLinearGradient(0,0,n,n);
-    grad.addColorStop(0,"rgba(255,255,255,.55)");
-    grad.addColorStop(0.22,"rgba(255,255,255,.14)");
-    grad.addColorStop(0.55,"rgba(255,255,255,0)");
-    grad.addColorStop(1,"rgba(0,0,0,.38)");
-    tc.fillStyle=grad;
-    tc.fillRect(0,0,n,n);
-    tc.fillStyle="rgba(255,255,255,.4)";
-    tc.fillRect(n*0.14,n*0.14,n*0.32,n*0.15);
-    BLOCK_TILE[t]=c;
-  }
-})();
 
 /* 3 · GAME CORE */
 const COLS=10, VIS_ROWS=20, BUFFER=2, ROWS=VIS_ROWS+BUFFER;
@@ -2003,35 +1977,44 @@ function label(txt,x,y,maxW){
   const sz=maxW?Math.min(TS(0.5),maxW*0.21):TS(0.5);
   textFit(txt,x,y,sz,INK.faint,"left",600,sz*0.13,maxW||1e5);
 }
-/* The pre-rendered tile scaled straight onto the cell's own box — full
-   cell, edge to edge, no inset — so no seam opens up between a tile and
-   its neighbours. drawImage always covers its destination rectangle
-   exactly regardless of image smoothing, so the gloss inside a tile can
-   be as soft as it likes without ever leaving a gap at the edge. */
+/* Flat, full cell, edge to edge — no inset, so no seam opens up between a
+   tile and its neighbours, and no gloss or border either: the menu's own
+   chrome is bare colour and text until something is active, and the
+   locked stack is at rest the same way an unselected menu item is. What
+   marks the one piece actually in play is pieceOutline() below, not
+   anything drawn here. */
 function block(x,y,s,type,alpha=1){
   ctx.globalAlpha=alpha;
-  ctx.drawImage(BLOCK_TILE[type]||BLOCK_TILE.G,x,y,s,s);
+  ctx.fillStyle=PIECE_COLOR[type]||PIECE_COLOR.G;
+  ctx.fillRect(x,y,s,s);
   ctx.globalAlpha=1;
 }
 
-/* The ghost is one outline around the whole piece rather than a box per cell.
-   The cell edges inside a piece are the ones you do not need: what is being
-   read off the bottom of the well is the shape and where its sides fall, and
-   four separate boxes make an S and an O the same answer — a count of cells —
-   until you look twice. So only the edges with nothing of the piece on the
-   other side are drawn, and the piece arrives as its own silhouette.
+/* One outline around the whole piece rather than a box per cell. The cell
+   edges inside a piece are the ones you do not need: what is being read
+   off the bottom of the well is the shape and where its sides fall, and
+   four separate boxes make an S and an O the same answer — a count of
+   cells — until you look twice. So only the edges with nothing of the
+   piece on the other side are drawn, and the piece arrives as its own
+   silhouette.
 
-   Fixed regardless of the board's own THEME, and the one thing on the board
-   a theme never dresses. A mark of where a piece will land is not the piece:
-   given the piece's own ink it competes with the stack it is there to be
-   measured against, and unlike the board outline it can't just borrow the
-   theme's colour — a theme is free to make that the same colour as the well
-   fills with, which the ghost can never afford to. It does still flip with
-   the page's light/dark chrome (set in applyTheme(), from INK_DARK/LIGHT),
-   since that's what the well itself is drawn in. */
-const GHOST_A = 0.40;
+   Shared by the ghost (a dim preview of where a piece will land) and the
+   active piece (see activeOutline() below) — the same "nothing at rest,
+   one bright outline on whatever's current" the rest of the UI draws its
+   own pill with (.mi::after: no border on an unselected item, a crisp one
+   on whatever's hovered, focused, or selected). The locked stack carries
+   no outline at all, same as the menu never borders an item at rest.
+
+   Fixed regardless of the board's own THEME, and the one thing on the
+   board a theme never dresses: given the piece's own ink it would compete
+   with the stack it's measured against, and unlike the board outline it
+   can't just borrow the theme's colour — a theme is free to make that the
+   same colour as the well fills with, which this can never afford to. It
+   does still flip with the page's light/dark chrome (set in applyTheme(),
+   from INK_DARK/LIGHT), since that's what the well itself is drawn in —
+   and what .mi::after itself flips to in light mode. */
 let GHOST_INK = "#ffffff";
-function ghostPiece(type,r,px,py,bx,by,cell){
+function pieceOutline(type,r,px,py,bx,by,cell,alpha,width){
   const ox=bx+px*cell, oy=by+(py-BUFFER)*cell;
   ctx.save();
   ctx.beginPath();
@@ -2041,15 +2024,27 @@ function ghostPiece(type,r,px,py,bx,by,cell){
   });
   ctx.closePath();
   /* Clipped to the shape and then stroked at twice the width, so the whole
-     line lies inside the piece rather than half of it hanging over the stack
-     the ghost is resting on. Both passes are the one closed path, which is
-     what leaves the corners to the mitre. */
+     line lies inside the piece rather than half of it hanging over the
+     stack it's resting on or dropping into. Both passes are the one
+     closed path, which is what leaves the corners to the mitre — rounded
+     off below, same as every corner the rest of the UI draws. */
   ctx.clip();
-  ctx.globalAlpha=GHOST_A;
+  ctx.globalAlpha=alpha;
   ctx.strokeStyle=GHOST_INK;
-  ctx.lineWidth=Math.max(1,cell*0.075)*2;
+  ctx.lineWidth=width;
+  ctx.lineJoin="round";
   ctx.stroke();
   ctx.restore();
+}
+const GHOST_A = 0.40;
+function ghostPiece(type,r,px,py,bx,by,cell){
+  pieceOutline(type,r,px,py,bx,by,cell,GHOST_A,Math.max(1,cell*0.075)*2);
+}
+/* The one piece actually being played gets the full-strength version of
+   that same outline — opaque, like .mi::after once something is current,
+   rather than the ghost's 40%. */
+function activeOutline(type,r,px,py,bx,by,cell){
+  pieceOutline(type,r,px,py,bx,by,cell,1,Math.max(1.25,cell*0.09)*2);
 }
 function text(str,x,y,size,color,align="left",weight=600,spacing=0){
   ctx.fillStyle=color; ctx.textAlign=align; ctx.textBaseline="alphabetic";
@@ -2256,6 +2251,7 @@ function drawWell(g){
     const lockP = g.grounded ? clamp(g.lockTimer/LOCK_MS,0,1) : 0;
     for(const [cx,cy] of g.cells(g.cur.x,g.cur.y,g.cur.r))
       if(cy>=BUFFER) block(bx+cx*cell,by+(cy-BUFFER)*cell,cell,g.cur.t,1-lockP*0.25);
+    activeOutline(g.cur.t,g.cur.r,g.cur.x,g.cur.y,bx,by,cell);
   }
 
   ctx.restore();
