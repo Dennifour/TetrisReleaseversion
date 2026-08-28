@@ -3809,10 +3809,9 @@ const PARENT = {
   "#v-join":  "#v-lobby"
 };
 const NET_SCREENS = {"#v-host":1,"#v-join":1};
-/* Screens no longer animate out, so nothing needs to wait for that to
-   finish before running — this just defers a tick so a caller's own DOM
-   change (closing every veil) commits first. */
-const EXIT_MS=0;
+/* Screens no longer animate out, so this isn't waiting on a transition to
+   finish — it's a deliberate 100ms beat between screens. */
+const EXIT_MS=100;
 function afterScreen(fn){ setTimeout(fn,EXIT_MS); }
 
 const UI = {
