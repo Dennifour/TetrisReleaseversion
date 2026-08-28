@@ -1711,10 +1711,6 @@ class Game {
        board for CLEAR_MS. Nothing here reads it back — it is scenery, held
        up in front of a stack that has already moved. */
     const preDrop = this.board.map(row=>[...row]);
-    // What each cleared cell was, read off before the splice erases it — the
-    // spark burst is colored per column from this, not the frozen preDrop
-    // (which has the same rows already blanked, for the hold-and-drop above).
-    const clearedCells = rows.map(y=>preDrop[y].slice());
     for(const y of rows) preDrop[y] = new Array(COLS).fill(null);
 
     for(const y of [...rows].sort((a,b)=>a-b)){
@@ -1722,7 +1718,7 @@ class Game {
       this.board.unshift(new Array(COLS).fill(null));
     }
     this.clearing = {board:preDrop, t:0};
-    this.events.push({e:"clear",rows,cells:clearedCells,n,spin,perfect:willBeEmpty});
+    this.events.push({e:"clear",n,spin,perfect:willBeEmpty});
 
     if(this.mode==="sprint" && this.lines>=40){ this.win(); return; }
     this.applyGarbage();
@@ -2002,14 +1998,6 @@ function label(txt,x,y,maxW){
   const sz=maxW?Math.min(TS(0.5),maxW*0.21):TS(0.5);
   textFit(txt,x,y,sz,INK.faint,"left",600,sz*0.13,maxW||1e5);
 }
-/* What colour this piece is under whichever skin is up. Everything that tints
-   itself after a piece — the clearing dust, and anything added in that vein
-   later — asks here rather than reaching into a palette itself, so one
-   setting covers the board and what comes off it. */
-function inkOf(type){
-  return type==="G" ? NES_GARBAGE : PAL[NES_SLOT[type]||0];
-}
-
 /* The three NES tiles, laid out on the eight-unit grid the originals were
    drawn on. All three are solid: the pale one is a coloured frame with white
    inside it, not a hole — the white is as much the block as the colour is.
@@ -2131,16 +2119,8 @@ const BOB_UP_STIFF=0.04, BOB_UP_DAMP=0.76;   // the return
 const CLEAR_TXT_IN=100, CLEAR_TXT_HOLD=2000, CLEAR_TXT_OUT=100;
 const CLEAR_TXT_MS=CLEAR_TXT_IN+CLEAR_TXT_HOLD+CLEAR_TXT_OUT;
 
-// Full brightness from the first frame — the dust is there the instant the
-// line is, not swelling into view — and faded out slowly at the end of its
-// life, rather than dimming the whole time it hovers.
-const SPARK_FADE_OUT=380;
-// A floor on the trim in burst(), not a target: a single tetris alone spawns
-// 560 of these, so this only ever bounds sparks left over from earlier bursts.
-const SPARK_CAP=500;
-
 const FX = {
-  banners:[], clearBanners:[], sparks:[], clearGen:0, clearBannerGen:-1, bob:0, bobV:0,
+  banners:[], clearBanners:[], clearGen:0, clearBannerGen:-1, bob:0, bobV:0,
   banner(txt,kind){
     FX.banners.push({txt,life:1,y:0,big:kind==="big"||kind==="pc"});
     if(FX.banners.length>3) FX.banners.shift();
@@ -2181,45 +2161,6 @@ const FX = {
     if(!CFG.bob) return;
     FX.bobV += 0.12;
   },
-  /* A cleared cell comes apart into fine, twinkling dust rather than being
-     thrown — a dissolve, not an explosion. Each spark launches at a gentle,
-     low speed in any direction, then a steady wind out of the left (in
-     step()) carries the whole cloud away, sand blowing off the row rather
-     than each grain going its own way. Colored from the cell's own type, so
-     the dust is what the row was made of. Skipped under reduced motion,
-     same as the harness already does for its own transitions — this is the
-     one animation in the game that isn't. */
-  burst(rows,cells,n){
-    if(!L || REDUCED.matches) return;
-    const cell=L.cell, per=6+n*2;
-    const before=FX.sparks.length;
-    rows.forEach((y,ri)=>{
-      const cy=L.by+(y-BUFFER+0.5)*cell, rowCells=cells[ri];
-      for(let x=0;x<COLS;x++){
-        const type=rowCells[x]; if(!type) continue;
-        const col = inkOf(type);
-        const cx=L.bx+(x+0.5)*cell;
-        for(let i=0;i<per;i++){
-          const ang=Math.random()*Math.PI*2, spd=cell*(0.015+Math.random()*0.05);
-          FX.sparks.push({
-            x:cx+(Math.random()-0.5)*cell*0.6, y:cy+(Math.random()-0.5)*cell*0.6,
-            vx:Math.cos(ang)*spd, vy:Math.sin(ang)*spd,
-            r:cell*(0.045+Math.random()*0.065),   // fewer sparks per burst, so each one's bigger
-            t:0, dur:1100+Math.random()*700,
-            seed:Math.random()*1000,
-            col
-          });
-        }
-      }
-    });
-    /* The cap only ever gives up the oldest dust still hanging in the air —
-       never this burst's own. rows[] runs top row first, so trimming a
-       straight 500 off the front here would have thrown away exactly the
-       rows spawned first: a tetris (1040 sparks) kept only its bottom two. */
-    const spawned=FX.sparks.length-before;
-    const cap=Math.max(SPARK_CAP,spawned);
-    if(FX.sparks.length>cap) FX.sparks.splice(0,FX.sparks.length-cap);
-  },
   step(dt){
     const f=dt/16.67;
     for(let i=FX.banners.length-1;i>=0;i--){
@@ -2229,19 +2170,6 @@ const FX = {
     for(let i=FX.clearBanners.length-1;i>=0;i--){
       const b=FX.clearBanners[i]; b.t+=dt;
       if(b.t>=CLEAR_TXT_MS) FX.clearBanners.splice(i,1);
-    }
-    for(let i=FX.sparks.length-1;i>=0;i--){
-      const p=FX.sparks[i]; p.t+=dt;
-      if(p.t>=p.dur){ FX.sparks.splice(i,1); continue; }
-      // Light drag and a steady wind out of the left, straight across — no
-      // vertical component at all. The flutter is layered on top at draw
-      // time (drawSparks), not summed in here: adding a sine to a position
-      // every frame integrates it into real drift instead of a bounded
-      // wobble.
-      p.vx = p.vx*Math.pow(0.985,f) + L.cell*0.003*f;
-      p.vy *= Math.pow(0.985,f);
-      p.x += p.vx*f;
-      p.y += p.vy*f;
     }
     if(FX.bob||FX.bobV){
       if(FX.bobV>0){
@@ -2283,7 +2211,6 @@ function render(g, opp){
   if(FX.bob) ctx.translate(0,FX.bob*L.cell);
 
   drawWell(g);
-  drawSparks();
   if(g.mode==="versus") (opp||[]).slice(0,3).forEach((f,i)=>drawOpponent(f,i,g));
   drawGarbageMeter(g);
   drawSpeedBar(g);
@@ -2355,37 +2282,6 @@ function drawWell(g){
     ctx.fillStyle="rgba(10,10,12,.86)"; ctx.fillRect(bx,by,bw,bh);
     textFit(T("g_paused"),bx+bw/2,by+bh/2,TS(0.95),INK.fg,"center",600,TS(0.95)*0.16,bw*0.9);
   }
-}
-
-/* Additive blending is what makes a cluster of dust read as one glow rather
-   than a handful of separate dots — where two sparks overlap, the light
-   adds instead of one occluding the other. Each also twinkles on its own
-   slow cycle rather than holding one brightness, which is most of what
-   reads as "dust" instead of "dots". Unclipped: a spark drifting past the
-   top or sides of the well is the point, not a bug to clip away. */
-function drawSparks(){
-  if(!FX.sparks.length) return;
-  ctx.save();
-  ctx.globalCompositeOperation="lighter";
-  for(const p of FX.sparks){
-    const t=p.t, holdEnd=p.dur-SPARK_FADE_OUT;
-    const env = t<holdEnd ? 1 : Math.max(0,(p.dur-t)/SPARK_FADE_OUT);
-    if(env<=0) continue;
-    const twinkle=0.65+0.35*Math.sin((t+p.seed)*0.009);
-    const a=env*twinkle;
-    // A bounded flutter, recomputed fresh each frame from t rather than
-    // accumulated — it can never drift the way summing it into position did.
-    const wob=Math.sin((t+p.seed)*0.006)*L.cell*0.08;
-    const px=p.x, py=p.y+wob;
-    const grad=ctx.createRadialGradient(px,py,0,px,py,p.r);
-    grad.addColorStop(0,"#fffdf5");
-    grad.addColorStop(0.45,p.col);
-    grad.addColorStop(1,"rgba(0,0,0,0)");
-    ctx.globalAlpha=a;
-    ctx.fillStyle=grad;
-    ctx.beginPath(); ctx.arc(px,py,p.r,0,Math.PI*2); ctx.fill();
-  }
-  ctx.restore();
 }
 
 /* Drawn last and outside the well's clip, because leaving the well is the
@@ -2929,7 +2825,7 @@ function startGame(mode){
     FOES.forEach(f=>{ f.board=null; f.sent=0; f.score=0; f.dead=false; });
   }
   else FOES=[];
-  FX.banners.length=0; FX.clearBanners.length=0; FX.sparks.length=0; FX.bob=FX.bobV=0;
+  FX.banners.length=0; FX.clearBanners.length=0; FX.bob=FX.bobV=0;
   Input.reset();
   UI.closeAll();
   document.body.classList.toggle("hot",mode==="versus");
@@ -2979,7 +2875,7 @@ function drainEvents(){
     const ev=G.events.shift();
     switch(ev.e){
       case "text": FX.clearText(ev.text,ev.kind==="big"||ev.kind==="pc"); break;
-      case "clear": FX.bump(ev.n); FX.burst(ev.rows,ev.cells,ev.n); break;
+      case "clear": FX.bump(ev.n); break;
       case "drop": FX.thud(); break;
       case "attack":
         if(G.mode==="versus" && Net.ready()){
