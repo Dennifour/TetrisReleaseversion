@@ -170,6 +170,271 @@ body.swap #act-wrap{transform:translate(calc(var(--shift-x,0px) * -1),var(--shif
 .dpad b.hit svg path{fill:currentColor}
 .abtn.hit{background:var(--fg);border-color:var(--fg);color:var(--bg);transform:scale(.95)}
 
+/* --- screens --- */
+/* Screens cross-fade on visibility rather than display, so both directions
+   transition and the canvas underneath keeps painting. Nothing is
+   panelled: a screen is a page, read against one column. */
+.veil{
+  --edge:max(16px,5vw);
+  --col:min(460px,100%);
+  position:fixed;inset:0;z-index:10;display:flex;justify-content:center;
+  padding:calc(env(safe-area-inset-top) + 16px) var(--edge) 16px;
+  background:rgba(10,10,12,.94);
+  overflow:hidden auto;overscroll-behavior:contain;touch-action:pan-y;
+  opacity:0;visibility:hidden;pointer-events:none;
+  transition:opacity .18s ease .25s,visibility 0s .43s;
+}
+:root[data-ui-theme="light"] .veil{background:rgba(255,255,255,.96)}
+.veil.on{opacity:1;visibility:visible;pointer-events:auto;transition:opacity .26s ease}
+.card{
+  width:var(--col);margin-block:auto;padding-right:12px;
+  transform:translateX(-46px) scale(.99);
+  transition:transform .2s cubic-bezier(.2,.9,.25,1) .25s;
+}
+.veil.fwd .card{transform:translateX(46px) scale(.99);transition:none}
+.veil.on .card{transform:none;transition:transform .28s cubic-bezier(.2,.9,.25,1)}
+.veil.out .mi{
+  transform:translateX(-16px);opacity:0;
+  transition:transform .17s ease-in .25s,opacity .15s ease .25s;
+}
+.veil.out .mi:nth-child(2){transition-delay:.27s}
+.veil.out .mi:nth-child(3){transition-delay:.29s}
+.veil.out .mi:nth-child(4){transition-delay:.31s}
+
+.brand{
+  font-weight:700;letter-spacing:-.01em;text-align:left;color:var(--fg);
+  font-size:clamp(24px,6.4vmin,40px);margin:0 0 20px;text-transform:lowercase;
+  line-height:1.2;
+}
+html[lang=ko] .brand{letter-spacing:0}
+html[lang=ko] h3,html[lang=ko] .netstat{letter-spacing:.04em}
+.tag{text-align:left;color:var(--fg-dim);font-size:14.5px;margin:-12px 0 22px;line-height:1.55}
+h3{
+  margin:30px 0 0;padding-bottom:9px;
+  font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--fg-faint);font-weight:600;line-height:1.4;
+}
+h3:first-of-type{margin-top:4px}
+
+/* A destination is just its label — no slab, no border, nothing at rest.
+   The one pill in the whole page appears only when a label is hovered,
+   focused, or the current selection. */
+.menu{display:grid;gap:2px}
+.mi{
+  position:relative;
+  display:block;text-align:left;cursor:pointer;width:fit-content;max-width:100%;
+  padding:11px 16px;border:0;border-radius:999px;
+  background:none;color:var(--fg);
+  font-family:inherit;font-size:15.5px;font-weight:700;letter-spacing:0;
+  line-height:1.35;text-transform:lowercase;
+}
+.mi[hidden]{display:none}
+.mi::after{
+  content:"";position:absolute;inset:0;border-radius:999px;
+  border:1.5px solid #fff;pointer-events:none;
+  opacity:0;transform:scale(.94);
+  transition:opacity .16s ease,transform .16s cubic-bezier(.2,.9,.25,1);
+}
+:root[data-ui-theme="light"] .mi::after{border-color:#000}
+.mi:focus-visible,.mi.on,.mi:active,.mi.lit{ outline:none; }
+.mi:focus-visible::after,.mi.on::after,.mi:active::after,.mi.lit::after{ opacity:1;transform:none; }
+@media (hover:hover){ .mi:hover::after{ opacity:1;transform:none; } }
+.mi .sub{display:none}
+.mi.ctr{text-align:center;width:100%}
+.mi.lang{text-transform:none}
+.mi.ghost{color:var(--fg-dim);font-weight:600;font-size:13.5px;padding:9px 14px}
+.mi[disabled]{opacity:.35;pointer-events:none}
+.mi.ctr[disabled].on{opacity:.9}
+
+/* records: a plain ledger, nothing to press */
+.recs{display:grid;gap:7px}
+.rec{
+  display:flex;align-items:baseline;justify-content:space-between;gap:16px;
+  background:var(--surface);border:1px solid var(--line);border-radius:var(--radius-sm,10px);
+  padding:18px 20px;
+}
+.rec .k{font-size:12px;letter-spacing:.13em;text-transform:uppercase;color:var(--fg-faint);font-weight:600;line-height:1.4}
+.rec .v{font-size:clamp(19px,4.6vmin,26px);font-weight:600;letter-spacing:.04em;color:var(--fg);white-space:nowrap;font-variant-numeric:tabular-nums}
+.rec.none .v{color:var(--fg-faint);font-size:clamp(14px,3.2vmin,16px)}
+
+@media (max-height:600px){
+  .brand{margin-bottom:12px}
+  .tag{margin-bottom:14px}
+  .rec{padding:11px 20px}
+  .mi{padding:9px 14px}
+  h3{margin-top:20px}
+  .sp,.seat-card{padding:11px}
+}
+
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.mt8{margin-top:8px}.mt14{margin-top:14px}.mt16{margin-top:16px}
+.row>.mi{white-space:nowrap}
+
+input.tf,textarea.tf{
+  display:block;width:100%;
+  padding:14px 16px;border:1px solid var(--line);border-radius:var(--radius-sm,10px);
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  font-size:12.5px;letter-spacing:0;
+  background:var(--surface);color:var(--fg-dim);
+}
+textarea.tf{height:92px;resize:none;line-height:1.5}
+input.tf:focus,textarea.tf:focus{outline:none;color:var(--fg);border-color:var(--line-strong)}
+.hint{font-size:13px;color:var(--fg-faint);line-height:1.7;margin:13px 0 0}
+
+.bindrow{cursor:pointer;transition:background .12s;border-radius:8px}
+.bindrow b{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;letter-spacing:.06em}
+.bindrow.binding b{color:var(--danger)}
+.bindrow:active{background:var(--surface)}
+@media (hover:hover){ .bindrow:hover{background:var(--surface)} }
+.mi.room{width:100%;border-radius:var(--radius-sm,10px);padding:13px 16px}
+.mi.room::after{border-radius:var(--radius-sm,10px)}
+.mi.room .sub{display:block;margin-top:3px;font-size:12px;color:var(--fg-faint);text-transform:none;font-weight:400}
+#on-list{display:grid;gap:7px}
+.netstat{font-size:11.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--fg-faint);margin-top:18px;line-height:1.5}
+.netstat b{color:var(--fg);font-weight:600}
+.netstat b.bad{color:var(--danger)}
+.netstat b.wait{color:var(--fg-dim)}
+.diag{font-size:11px;letter-spacing:.06em;color:var(--fg-faint);margin:6px 0 0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;line-height:1.5}
+
+.sp{
+  display:flex;justify-content:space-between;align-items:center;gap:12px;
+  padding:15px 0;border-top:1px solid var(--line);font-size:14.5px;line-height:1.5;
+}
+.sp[hidden]{display:none}
+.sp span{color:var(--fg-dim);min-width:0}
+.sp b{flex:0 0 auto;text-align:right;font-weight:600;font-size:14px;color:var(--fg)}
+.sp small{display:block;margin-top:5px;color:var(--fg-faint);font-size:12.5px;line-height:1.5}
+.sp small[id]{opacity:.5}
+#o-stats{margin:2px 0 4px}
+
+.sw{
+  width:42px;height:24px;border-radius:999px;background:var(--surface);
+  border:1px solid var(--line);position:relative;cursor:pointer;flex:0 0 auto;
+  transition:background .12s,border-color .12s;
+}
+.sw::after{
+  content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;
+  background:var(--fg-faint);transition:transform .12s,background .12s;
+}
+.sw.on{border-color:var(--fg)}
+.sw.on::after{transform:translateX(18px);background:var(--fg)}
+
+input[type=range]{-webkit-appearance:none;appearance:none;height:1px;flex:0 0 44%;background:var(--line-strong);outline:none}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:50%;background:var(--fg);cursor:pointer;border:0}
+input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:var(--fg);cursor:pointer;border:0}
+
+/* ---- rail + panel: settings and the server room list ------------------
+   A bare-text list on its own, a list beside its own content once there's
+   room for both. Below the breakpoint, opening an item swaps the list for
+   its panel on the same screen — the panel's own back link returns to the
+   list, and the screen's own [data-back] still leaves the whole screen. */
+.split .rail{display:grid;gap:2px;margin-bottom:6px}
+.split .panel-back{display:none}
+@media (max-width:759px){
+  .split .panel-area{display:none}
+  .split.panel-open .rail,.split.panel-open>h3:first-child{display:none}
+  .split.panel-open .panel-area{display:block}
+  .split.panel-open .panel-back{display:inline-block;margin-bottom:8px}
+}
+@media (min-width:760px){
+  #v-set .card,#v-server .card{width:min(760px,100%)}
+  .split{display:grid;grid-template-columns:180px 1fr;gap:8px 40px;align-items:start}
+}
+
+.panel{display:none}
+.panel.on{display:block;animation:panelin .26s cubic-bezier(.2,.9,.25,1)}
+@keyframes panelin{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}
+.panel h3{margin:32px 0 0;padding-bottom:10px;border-bottom:1px solid var(--line)}
+.panel h3:first-child{margin-top:4px}
+.panel .hint{margin-top:11px}
+
+.fold summary{display:block;cursor:pointer;list-style:none}
+.fold summary::-webkit-details-marker{display:none}
+.fold summary h3{
+  display:flex;align-items:center;justify-content:space-between;gap:14px;
+  font-size:15px;font-weight:800;letter-spacing:.10em;color:var(--fg-dim);
+  padding-bottom:12px;
+}
+html[lang=ko] .fold summary h3{letter-spacing:.02em}
+.fold summary h3::after{
+  content:"";flex:none;width:.42em;height:.42em;margin-bottom:.14em;
+  border-right:2.4px solid currentColor;border-bottom:2.4px solid currentColor;
+  transform:rotate(45deg);transition:transform .2s ease;opacity:.7;
+}
+.fold[open] summary h3::after{transform:rotate(-135deg);opacity:1}
+.fold[open] summary h3{color:var(--fg)}
+.foldbody{overflow:hidden;transition:height .3s cubic-bezier(.2,.9,.25,1)}
+.fold summary:focus-visible h3,.fold summary:active h3{color:var(--fg)}
+@media (hover:hover){ .fold summary:hover h3{color:var(--fg)} .fold summary:hover h3::after{opacity:1} }
+
+.opts{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:0 clamp(18px,4.4vw,46px)}
+.opts .sp{border-top:0;padding:13px 0}
+.opts.lined .sp{border-top:1px solid var(--line)}
+.opts .sp.rng{display:block;padding:14px 0 16px}
+.opts .sp.rng input[type=range]{display:block;width:100%;flex:none;margin-top:13px}
+.sp.moot{opacity:.4;pointer-events:none}
+.opts .full{grid-column:1/-1}
+.opts .full.row{margin-top:6px}
+@media (max-height:600px){
+  .panel h3{margin-top:22px}
+  .opts .sp{padding:10px 0}
+  .opts .sp.rng{padding:11px 0 13px}
+}
+
+/* ---- versus room -------------------------------------------------------
+   Seats are cards, not nav — the one place in the page that draws a border
+   at rest, since it is showing who's here rather than offering to go
+   somewhere. A message doesn't get a log: it floats over the sender's own
+   card for a few seconds and clears. */
+#v-room .card{width:min(640px,100%)}
+.seat-grid{display:grid;grid-template-columns:1fr 1fr;gap:26px 10px;margin-top:34px}
+.seat-card{
+  position:relative;border:1px solid var(--line);border-radius:var(--radius-sm,10px);
+  padding:16px;min-height:104px;
+  display:flex;flex-direction:column;justify-content:space-between;gap:10px;
+  background:var(--surface);
+}
+.seat-card.mine{border-color:var(--line-strong)}
+.seat-card.ready{border-color:#4fe0a8}
+.seat-card.empty{color:var(--fg-faint);align-items:center;justify-content:center;text-align:center}
+.seat-card .w{font-size:clamp(22px,6vmin,28px);font-weight:700;line-height:1;font-variant-numeric:tabular-nums}
+.seat-card .w small{display:block;margin-top:2px;font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--fg-faint);font-weight:600}
+.seat-card .nm{
+  font-size:13.5px;font-weight:600;color:var(--fg-dim);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.seat-card.ready .nm{color:#4fe0a8}
+.chat-bubble{
+  position:absolute;left:10px;right:10px;top:-14px;transform:translateY(-100%) scale(.94);
+  background:#fff;color:#0a0a0c;border-radius:14px 14px 14px 4px;
+  padding:8px 12px;font-size:13px;font-weight:600;line-height:1.35;
+  box-shadow:0 6px 18px rgba(0,0,0,.35);
+  opacity:0;pointer-events:none;transition:opacity .18s ease,transform .18s ease;
+  max-height:4.2em;overflow:hidden;
+}
+.chat-bubble.show{opacity:1;transform:translateY(-100%) scale(1)}
+.room-actions{display:flex;align-items:center;gap:10px;margin-top:18px}
+.room-actions .mi{flex:1 1 auto;text-align:center;border:1.5px solid var(--line-strong);width:auto}
+.room-actions .mi.on::after,.room-actions .mi:active::after{opacity:0}
+.room-actions .mi.ready{border-color:#4fe0a8;color:#4fe0a8}
+.chat-fab{
+  flex:0 0 auto;width:44px;height:44px;border-radius:50%;
+  border:1.5px solid var(--line-strong);background:none;color:var(--fg-dim);
+  display:grid;place-items:center;cursor:pointer;
+}
+.chat-fab svg{width:19px;height:19px;fill:currentColor}
+.chat-fab:hover,.chat-fab.on{color:var(--fg);border-color:var(--fg)}
+.chat-compose{display:flex;gap:8px;margin-top:10px;overflow:hidden;max-height:0;transition:max-height .2s ease}
+.chat-compose.on{max-height:60px}
+.chat-compose input.tf{flex:1 1 auto}
+
+@media (prefers-reduced-motion:reduce){
+  .veil,.veil .card,.mi,.mi::after{transition-duration:.01ms;transition-delay:0s}
+  .veil.fwd .card,.veil.out .mi{transition-duration:.01ms;transition-delay:0s}
+  .panel.on{animation-duration:.01ms}
+  .fold summary h3::after{transition-duration:.01ms}
+  .foldbody{transition-duration:.01ms}
+  .chat-bubble{transition-duration:.01ms}
+}
 </style>
 </head>
 <body>
@@ -208,6 +473,264 @@ body.swap #act-wrap{transform:translate(calc(var(--shift-x,0px) * -1),var(--shif
       <div class="abtn b gb" data-k="rotL">B</div>
       <div class="abtn a ga" data-k="rotR">A</div>
       <div class="abtn sm gp" data-k="pause" data-i18n="btn_pause"></div>
+    </div>
+  </div>
+</div>
+
+<div class="veil on" id="v-home">
+  <div class="card">
+    <div class="menu">
+      <button class="mi nav" data-go="play"><span data-i18n="m_play"></span></button>
+      <button class="mi nav" data-go="settings"><span data-i18n="m_settings"></span></button>
+    </div>
+  </div>
+</div>
+
+<div class="veil" id="v-play">
+  <div class="card">
+    <div class="menu">
+      <button class="mi nav" data-go="solo"><span data-i18n="m_solo"></span></button>
+      <button class="mi nav" data-go="sprint"><span data-i18n="m_sprint"></span></button>
+      <button class="mi nav" data-go="speed"><span data-i18n="m_speed"></span></button>
+      <button class="mi nav" data-go="versus"><span data-i18n="m_versus"></span></button>
+      <button class="mi nav" data-go="records"><span data-i18n="m_records"></span></button>
+    </div>
+    <div class="menu mt16"><button class="mi nav ghost" data-back="1" data-i18n="back"></button></div>
+  </div>
+</div>
+
+<div class="veil" id="v-speed">
+  <div class="card">
+    <div class="menu">
+      <button class="mi nav" data-speed="easy"><span data-i18n="sp_easy"></span></button>
+      <button class="mi nav" data-speed="normal"><span data-i18n="sp_normal"></span></button>
+      <button class="mi nav" data-speed="hard"><span data-i18n="sp_hard"></span></button>
+    </div>
+    <p class="hint" data-i18n="sp_hint"></p>
+    <div class="menu mt16"><button class="mi nav ghost" data-back="1" data-i18n="back"></button></div>
+  </div>
+</div>
+
+<div class="veil" id="v-records">
+  <div class="card">
+    <h1 class="brand" data-i18n="rec_t"></h1>
+    <p class="tag" data-i18n="rec_tag"></p>
+    <div class="recs" id="rec-list"></div>
+    <div class="menu mt16"><button class="mi nav ghost" data-back="1" data-i18n="back"></button></div>
+  </div>
+</div>
+
+<div class="veil" id="v-lobby">
+  <div class="card">
+    <div class="split" id="lobby-split">
+      <button class="mi ghost panel-back" type="button" id="lobby-panelback">&larr; <span data-i18n="lob_t"></span></button>
+      <div class="menu rail" id="lobby-rail">
+        <button class="mi on" data-panel="server"><span data-i18n="lob_server"></span></button>
+        <button class="mi" data-panel="p2p"><span data-i18n="lob_p2p"></span></button>
+        <button class="mi nav ghost mt16" data-back="1" data-i18n="back"></button>
+      </div>
+      <div class="panel-area">
+        <section class="panel on" data-panel="server">
+          <h3 data-i18n="srv_list"></h3>
+          <div id="on-list"></div>
+          <div class="menu mt16"><button class="mi nav" id="b-mkroom"><span data-i18n="srv_make"></span></button></div>
+          <p class="hint" id="srv-hint"></p>
+        </section>
+        <section class="panel" data-panel="p2p">
+          <p class="tag" data-i18n="net_tag"></p>
+          <div class="menu">
+            <button class="mi nav" data-go="host"><span data-i18n="lob_host"></span></button>
+            <button class="mi nav" data-go="join"><span data-i18n="lob_join"></span></button>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="veil" id="v-host">
+  <div class="card">
+    <h1 class="brand" data-i18n="host_t"></h1>
+    <p class="tag" data-i18n="net_tag"></p>
+    <h3 data-i18n="host_s1"></h3>
+    <textarea class="tf" id="h-out" readonly data-i18n-ph="ph_gen"></textarea>
+    <div class="menu mt8"><button class="mi" id="h-copy" data-i18n="host_copy"></button></div>
+    <h3 data-i18n="host_s2"></h3>
+    <textarea class="tf" id="h-in" data-i18n-ph="ph_reply"></textarea>
+    <div class="menu mt8"><button class="mi" id="h-connect" data-i18n="host_connect"></button></div>
+    <div class="netstat"><span data-i18n="status"></span> <b class="wait" id="hs">—</b></div>
+    <p class="diag" id="h-diag"></p>
+    <p class="hint" id="h-hint" data-i18n="host_hint"></p>
+    <div class="menu mt14"><button class="mi nav ghost" data-back="1" data-i18n="cancel"></button></div>
+  </div>
+</div>
+
+<div class="veil" id="v-join">
+  <div class="card">
+    <h1 class="brand" data-i18n="join_t"></h1>
+    <p class="tag" data-i18n="net_tag"></p>
+    <h3 data-i18n="join_s1"></h3>
+    <textarea class="tf" id="j-in" data-i18n-ph="ph_host"></textarea>
+    <div class="menu mt8"><button class="mi" id="j-go" data-i18n="join_make"></button></div>
+    <h3 data-i18n="join_s2"></h3>
+    <textarea class="tf" id="j-out" readonly placeholder="—"></textarea>
+    <div class="menu mt8"><button class="mi" id="j-copy" data-i18n="join_copy"></button></div>
+    <div class="netstat"><span data-i18n="status"></span> <b class="wait" id="js">—</b></div>
+    <p class="diag" id="j-diag"></p>
+    <p class="hint" id="j-hint" data-i18n="join_hint"></p>
+    <div class="menu mt14"><button class="mi nav ghost" data-back="1" data-i18n="cancel"></button></div>
+  </div>
+</div>
+
+<div class="veil" id="v-room">
+  <div class="card">
+    <h1 class="brand" id="room-title">—</h1>
+    <p class="tag" id="room-code">—</p>
+    <div class="row" id="rulerow">
+      <button class="mi ctr rule" type="button" data-rule="attack" data-i18n="rule_attack"></button>
+      <button class="mi ctr rule" type="button" data-rule="score" data-i18n="rule_score"></button>
+    </div>
+    <p class="hint" id="rule-hint"></p>
+    <div class="seat-grid" id="seatlist"></div>
+    <p class="hint" id="room-hint" data-i18n="room_hint"></p>
+    <div class="room-actions">
+      <button class="mi ready" id="b-ready" data-i18n="room_ready"></button>
+      <button class="chat-fab" id="b-chat-toggle" type="button" data-i18n-aria="chat_send">
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3.4 20.4 21 12 3.4 3.6 3.4 10.2 15 12 3.4 13.8Z"/></svg>
+      </button>
+    </div>
+    <form class="chat-compose" id="chatbar">
+      <input class="tf" id="chat-in" maxlength="120" autocomplete="off" data-i18n-ph="ph_chat">
+    </form>
+    <div class="menu mt16"><button class="mi nav ghost" id="b-leave" data-i18n="room_leave"></button></div>
+  </div>
+</div>
+
+<div class="veil" id="v-set">
+  <div class="card">
+    <h1 class="brand" data-i18n="c_settings"></h1>
+    <div class="split" id="set-split">
+      <button class="mi ghost panel-back" type="button" id="set-panelback">&larr; <span data-i18n="c_settings"></span></button>
+      <div class="menu rail" id="set-rail">
+        <button class="mi on" data-tab="general"><span data-i18n="c_general"></span></button>
+        <button class="mi" data-tab="video"><span data-i18n="c_video"></span></button>
+        <button class="mi" data-tab="audio"><span data-i18n="c_audio"></span></button>
+        <button class="mi" data-tab="controls"><span data-i18n="c_controls"></span></button>
+        <button class="mi" data-tab="online"><span data-i18n="c_net"></span></button>
+        <button class="mi nav ghost mt16" data-back="1" data-i18n="back"></button>
+      </div>
+      <div class="panel-area">
+        <section class="panel on" data-panel="general" role="tabpanel">
+          <h3 data-i18n="set_lang"></h3>
+          <div class="row" id="langrow">
+            <button class="mi ctr lang" data-lang="en">English</button>
+            <button class="mi ctr lang" data-lang="ko">한국어</button>
+          </div>
+          <h3 data-i18n="set_id"></h3>
+          <input class="tf box" id="s-name" maxlength="12" data-i18n-ph="ph_name">
+          <p class="hint" data-i18n="set_id_hint"></p>
+        </section>
+
+        <section class="panel" data-panel="video" role="tabpanel">
+          <h3 data-i18n="set_appearance"></h3>
+          <div class="row">
+            <button class="mi ctr uitheme" type="button" data-uitheme="light" data-i18n="set_light"></button>
+            <button class="mi ctr uitheme" type="button" data-uitheme="dark" data-i18n="set_dark"></button>
+            <button class="mi ctr uitheme" type="button" data-uitheme="system" data-i18n="set_system"></button>
+          </div>
+          <h3 data-i18n="set_theme"></h3>
+          <div class="row">
+            <button class="mi ctr theme" type="button" data-theme="default" data-i18n="theme_default"></button>
+          </div>
+          <p class="hint" id="theme-hint"></p>
+          <h3 data-i18n="set_pres"></h3>
+          <div class="opts">
+            <div class="sp"><span data-i18n="set_ghost"></span><div class="sw on" id="s-ghost"></div></div>
+            <div class="sp"><span data-i18n="set_grid"></span><div class="sw on" id="s-grid"></div></div>
+            <div class="sp"><span data-i18n="set_bob"></span><div class="sw on" id="s-bob"></div></div>
+            <div class="sp rng"><span><span data-i18n="set_boardsize"></span><small id="l-boardsize"></small></span><input type="range" id="s-boardsize" min="40" max="100" step="5"></div>
+          </div>
+          <h3 data-i18n="set_bg"></h3>
+          <div class="sp rng" id="bg-brightrow" hidden><span><span data-i18n="set_bg_bright"></span><small id="l-bg"></small></span><input type="range" id="s-bg" min="0" max="100" step="5"></div>
+          <p class="hint" id="bg-hint"></p>
+        </section>
+
+        <section class="panel" data-panel="audio" role="tabpanel">
+          <h3 data-i18n="set_sound"></h3>
+          <div class="opts">
+            <div class="sp"><span data-i18n="set_snd"></span><div class="sw on" id="s-snd"></div></div>
+            <div class="sp rng"><span><span data-i18n="set_vol"></span><small id="l-vol"></small></span><input type="range" id="s-vol" min="0" max="100" step="5"></div>
+          </div>
+          <p class="hint" data-i18n="set_sound_hint"></p>
+        </section>
+
+        <section class="panel" data-panel="controls" role="tabpanel">
+          <h3 data-i18n="set_handling"></h3>
+          <div class="opts">
+            <div class="sp rng"><span><span data-i18n="set_das"></span><small id="l-das"></small></span><input type="range" id="s-das" min="40" max="400" step="10"></div>
+            <div class="sp rng"><span><span data-i18n="set_arr"></span><small id="l-arr"></small></span><input type="range" id="s-arr" min="0" max="160" step="5"></div>
+            <div class="sp rng"><span><span data-i18n="set_sdf"></span><small id="l-sdf"></small></span><input type="range" id="s-sdf" min="2" max="40" step="1"></div>
+          </div>
+
+          <details class="fold" id="fold-touch">
+          <summary><h3 data-i18n="c_touch"></h3></summary>
+          <div class="foldbody">
+          <div class="row">
+            <button class="mi ctr tmode" data-touch="dpad" data-i18n="set_dpad"></button>
+            <button class="mi ctr tmode" data-touch="swipe" data-i18n="set_swipe"></button>
+            <button class="mi ctr tmode" data-touch="off" data-i18n="set_off"></button>
+          </div>
+          <p class="hint" id="touch-hint"></p>
+
+          <div id="swipe-opts" hidden>
+            <div class="opts">
+              <div class="sp rng"><span><span data-i18n="set_swmove"></span><small id="l-swmove"></small></span><input type="range" id="s-swmove" min="30" max="160" step="5"></div>
+              <div class="sp rng"><span><span data-i18n="set_swdrop"></span><small id="l-swdrop"></small></span><input type="range" id="s-swdrop" min="30" max="160" step="5"></div>
+              <div class="sp rng"><span><span data-i18n="set_swflick"></span><small id="l-swflick"></small></span><input type="range" id="s-swflick" min="40" max="260" step="10"></div>
+              <div class="full row"><button class="mi ghost" id="b-swreset" data-i18n="set_swreset"></button></div>
+            </div>
+          </div>
+
+          <div id="dpad-opts">
+            <div class="opts">
+              <div class="sp"><span><span data-i18n="set_swap"></span><small data-i18n="set_swap_s"></small></span><div class="sw" id="s-swap"></div></div>
+              <div class="sp rng"><span><span data-i18n="set_btnsize"></span><small id="l-btn"></small></span><input type="range" id="s-btn" min="70" max="140" step="5"></div>
+              <div class="sp rng"><span><span data-i18n="set_btny"></span><small id="l-bty"></small></span><input type="range" id="s-bty" min="-100" max="100" step="10"></div>
+              <div class="sp rng"><span><span data-i18n="set_btnx"></span><small id="l-btx"></small></span><input type="range" id="s-btx" min="-100" max="100" step="10"></div>
+              <div class="full row"><button class="mi ghost" id="b-ctlreset" data-i18n="set_ctlreset"></button></div>
+            </div>
+          </div>
+          </div>
+          </details>
+
+          <details class="fold" id="fold-keys">
+            <summary><h3 data-i18n="c_keys"></h3></summary>
+            <div class="foldbody">
+              <div class="opts lined" id="keylist"></div>
+              <p class="hint" data-i18n="set_bind_hint"></p>
+              <div class="row mt8"><button class="mi ghost" id="b-keyreset" data-i18n="set_reset_keys"></button></div>
+            </div>
+          </details>
+
+          <details class="fold" id="fold-pad">
+            <summary><h3 data-i18n="c_pad"></h3></summary>
+            <div class="foldbody">
+            <div class="opts">
+              <div class="sp"><span><span data-i18n="set_paduse"></span><small id="pad-state"></small></span><div class="sw" id="s-padon"></div></div>
+            </div>
+            <div class="opts lined" id="padlist"></div>
+            <p class="hint" data-i18n="set_padbind_hint"></p>
+            <div class="row mt8"><button class="mi ghost" id="b-padreset" data-i18n="set_reset_pad"></button></div>
+            </div>
+          </details>
+        </section>
+
+        <section class="panel" data-panel="online" role="tabpanel">
+          <h3 data-i18n="set_sig"></h3>
+          <input class="tf box" id="s-fb" autocapitalize="off" autocomplete="off" spellcheck="false" data-i18n-ph="ph_fb">
+          <p class="hint" data-i18n="set_sig_hint"></p>
+        </section>
+      </div>
     </div>
   </div>
 </div>
@@ -378,44 +901,222 @@ function noteRun(g,won,secs){
 /* 0b · LANGUAGE — data-i18n keys, one table per string */
 const LANGS = ["en","ko"];
 const I18N = {
-  b_sendto:["{n} TO {who}","{who}에게 {n}줄"],
-  e_badcode:["That code isn't valid. Copy the whole thing and try again.","올바른 코드가 아닙니다. 코드 전체를 복사해 다시 시도하세요."],
-  e_nothost:["That's not a host code. Ask for the code from STEP 1.","방장 코드가 아닙니다. 상대의 1단계 코드를 받으세요."],
-  e_notguest:["That's not a guest code. It should come from their STEP 2.","참가자 코드가 아닙니다. 상대의 2단계 코드여야 합니다."],
-  e_first:["Create your code first.","먼저 코드를 만드세요."],
-  e_nofb:["No signaling database set. Add a Firebase database URL under Settings → Online, or play P2P and swap codes by hand.","시그널링 데이터베이스가 설정되지 않았습니다. 설정 → 온라인에서 Firebase 주소를 입력하거나 P2P로 코드를 직접 주고받으세요."],
-  e_fbnet:["Could not reach the signaling database. Check the URL and your connection.","시그널링 데이터베이스에 연결하지 못했습니다. 주소와 네트워크를 확인하세요."],
-  e_fbauth:["The signaling database refused the write. Check its security rules.","시그널링 데이터베이스가 쓰기를 거부했습니다. 보안 규칙을 확인하세요."],
-  e_noroom:["No room with that code. Check it and try again.","그 코드의 방이 없습니다. 다시 확인해 주세요."],
-  e_roomfull:["Someone already joined that room.","이미 다른 사람이 참가한 방입니다."],
-  /* A room holds up to four, so the result names the round rather than a
-     player nobody agreed was "the" opponent. */
-  opponent:["OPPONENT","상대"],
-  btn_pause:["PAUSE","정지"],
-  btn_hold:["HOLD","홀드"],
-  btn_full:["Fullscreen","전체화면"],
-  g_hold:["HOLD","홀드"],
-  g_next:["NEXT","다음"],
-  g_go:["GO","시작"],
-  g_score:["SCORE","점수"],
-  g_lines:["LINES","줄"],
-  g_level:["LEVEL","레벨"],
-  g_left:["LINES LEFT","남은 줄"],
-  g_sent:["SENT","보냄"],
-  g_paused:["PAUSED","일시정지"],
-  g_topout:["TOP OUT","탑 아웃"],
-  g_clear:["CLEAR","클리어"],
-  g_time:["TIME","시간"],
-  g_timeleft:["TIME LEFT","남은 시간"],
-  g_done:["DONE","종료"],
-  g_ko:["K.O.","K.O."],
-  b_send:["SEND {n}","공격 {n}"],
-  b_quad:["TETRIS","테트리스"],
-  b_tspin:["T-SPIN","T스핀"],
+  act_hardDrop:["Hard drop","하드 드롭"],
+  act_hold:["Hold","홀드"],
+  act_left:["Move left","왼쪽 이동"],
+  act_none:["—","—"],
+  act_pause:["Pause","일시정지"],
+  act_press:["press…","입력 대기…"],
+  act_right:["Move right","오른쪽 이동"],
+  act_rot180:["Rotate 180°","180° 회전"],
+  act_rotL:["Rotate left","왼쪽 회전"],
+  act_rotR:["Rotate right","오른쪽 회전"],
+  act_softDrop:["Soft drop","소프트 드롭"],
+  b_b2b:["BACK-TO-BACK ×{n}","백투백 ×{n}"],
+  b_combo:["COMBO ×{n}","콤보 ×{n}"],
   b_mini:["T-SPIN MINI","T스핀 미니"],
   b_pc:["PERFECT CLEAR","퍼펙트 클리어"],
-  b_b2b:["BACK-TO-BACK ×{n}","백투백 ×{n}"],
-  b_combo:["COMBO ×{n}","콤보 ×{n}"]
+  b_quad:["TETRIS","테트리스"],
+  b_send:["SEND {n}","공격 {n}"],
+  b_sendto:["{n} TO {who}","{who}에게 {n}줄"],
+  b_tspin:["T-SPIN","T스핀"],
+  back:["BACK","뒤로"],
+  bg_hint_off:["This theme has no background image.","이 테마에는 배경 이미지가 없습니다."],
+  bg_hint_set:["Shown around the board while you play — never on a menu.","플레이 중 보드 주변에 표시됩니다. 메뉴에서는 표시되지 않습니다."],
+  btn_full:["Fullscreen","전체화면"],
+  btn_hold:["HOLD","홀드"],
+  btn_pause:["PAUSE","정지"],
+  c_audio:["AUDIO","소리"],
+  c_controls:["CONTROLS","컨트롤"],
+  c_general:["GENERAL","일반"],
+  c_keys:["KEYBOARD","키보드"],
+  c_net:["ONLINE","온라인"],
+  c_pad:["CONTROLLER","컨트롤러"],
+  c_settings:["Settings","설정"],
+  c_touch:["TOUCH","터치"],
+  c_video:["VIDEO","화면"],
+  cancel:["CANCEL","취소"],
+  chat_send:["Send","보내기"],
+  copied:["Copied.","복사했습니다."],
+  copyfail:["Could not copy automatically — the code is selected, copy it by hand.","자동 복사에 실패했습니다 — 코드가 선택되어 있으니 직접 복사해 주세요."],
+  d_link:["link","연결"],
+  d_local:["local","로컬"],
+  d_public:["public","공인"],
+  e_badcode:["That code isn't valid. Copy the whole thing and try again.","올바른 코드가 아닙니다. 코드 전체를 복사해 다시 시도하세요."],
+  e_direct:["A direct link could not be established. Some networks stop two devices talking to each other, even on the same Wi-Fi. Try again from another network, such as a phone's hotspot.","직접 연결에 실패했습니다. 같은 와이파이라도 기기 간 통신을 막는 네트워크가 있습니다. 휴대폰 핫스팟 같은 다른 네트워크에서 다시 시도해 보세요."],
+  e_fbauth:["The signaling database refused the write. Check its security rules.","시그널링 데이터베이스가 쓰기를 거부했습니다. 보안 규칙을 확인하세요."],
+  e_fbnet:["Could not reach the signaling database. Check the URL and your connection.","시그널링 데이터베이스에 연결하지 못했습니다. 주소와 네트워크를 확인하세요."],
+  e_first:["Create your code first.","먼저 코드를 만드세요."],
+  e_generic:["The connection failed. Try again, or try from another network.","연결에 실패했습니다. 다시 시도하거나 다른 네트워크에서 시도해 보세요."],
+  e_make:["Couldn't create a code: {m}","코드를 만들지 못했습니다: {m}"],
+  e_nofb:["No signaling database set. Add a Firebase database URL under Settings → Online, or play P2P and swap codes by hand.","시그널링 데이터베이스가 설정되지 않았습니다. 설정 → 온라인에서 Firebase 주소를 입력하거나 P2P로 코드를 직접 주고받으세요."],
+  e_noroom:["No room with that code. Check it and try again.","그 코드의 방이 없습니다. 다시 확인해 주세요."],
+  e_nostun:["The browser could not reach a STUN server, so it never learned this device's public address. A firewall or VPN may be blocking it.","STUN 서버에 연결하지 못해 이 기기의 공인 주소를 알 수 없었습니다. 방화벽이나 VPN이 막고 있을 수 있습니다."],
+  e_notguest:["That's not a guest code. It should come from their STEP 2.","참가자 코드가 아닙니다. 상대의 2단계 코드여야 합니다."],
+  e_nothost:["That's not a host code. Ask for the code from STEP 1.","방장 코드가 아닙니다. 상대의 1단계 코드를 받으세요."],
+  e_pastehost:["Paste the host's code first.","방장 코드를 먼저 붙여넣으세요."],
+  e_pastereply:["Paste your friend's reply code first.","친구의 답장 코드를 먼저 붙여넣으세요."],
+  e_peerleft:["Your opponent left.","상대가 나갔습니다."],
+  e_relay:["Lost the connection to the database.","데이터베이스 연결이 끊어졌습니다."],
+  e_roomfull:["Someone already joined that room.","이미 다른 사람이 참가한 방입니다."],
+  e_roomgone:["The room closed.","방이 닫혔습니다."],
+  e_timeout:["No connection after waiting.","기다렸지만 연결되지 않았습니다."],
+  e_waiting:["Still waiting for them to paste your reply — take your time.","상대가 답장 코드를 붙여넣기를 기다리는 중입니다. 천천히 하셔도 됩니다."],
+  f_firm:["a firm flick","세게 튕겨야"],
+  f_gentle:["a gentle flick","가볍게 튕겨도"],
+  f_normal:["a normal flick","보통 세기"],
+  g_clear:["CLEAR","클리어"],
+  g_done:["DONE","종료"],
+  g_go:["GO","시작"],
+  g_hold:["HOLD","홀드"],
+  g_ko:["K.O.","K.O."],
+  g_left:["LINES LEFT","남은 줄"],
+  g_level:["LEVEL","레벨"],
+  g_lines:["LINES","줄"],
+  g_next:["NEXT","다음"],
+  g_paused:["PAUSED","일시정지"],
+  g_score:["SCORE","점수"],
+  g_sent:["SENT","보냄"],
+  g_time:["TIME","시간"],
+  g_timeleft:["TIME LEFT","남은 시간"],
+  g_topout:["TOP OUT","탑 아웃"],
+  host_connect:["CONNECT","연결"],
+  host_copy:["COPY CODE","코드 복사"],
+  host_hint:["Send the code however you like. Nothing goes through a server.","코드는 아무 방법으로나 보내도 됩니다. 서버를 거치지 않습니다."],
+  host_s1:["Step 1 — send this code to your friend","1단계 — 이 코드를 친구에게 보내기"],
+  host_s2:["Step 2 — paste the code they send back","2단계 — 친구가 보낸 답장 코드 붙여넣기"],
+  host_t:["HOST","방 만들기"],
+  join_copy:["COPY REPLY","답장 복사"],
+  join_hint:["After they paste your reply, the match starts on its own.","친구가 답장 코드를 붙여넣으면 경기가 바로 시작됩니다."],
+  join_make:["CREATE REPLY CODE","답장 코드 만들기"],
+  join_s1:["Step 1 — paste your friend's code","1단계 — 친구의 코드를 붙여넣기"],
+  join_s2:["Step 2 — send this back to them","2단계 — 이 코드를 친구에게 보내기"],
+  join_t:["JOIN","참가하기"],
+  lob_host:["HOST — SWAP CODES","코드로 방 만들기"],
+  lob_join:["JOIN — SWAP CODES","코드로 참가하기"],
+  lob_p2p:["P2P","P2P"],
+  lob_server:["SERVER","서버"],
+  lob_t:["VERSUS","대전"],
+  m_play:["PLAY","플레이"],
+  m_records:["RECORDS","기록"],
+  m_settings:["SETTINGS","설정"],
+  m_solo:["MARATHON","마라톤"],
+  m_speed:["SPEED","스피드"],
+  m_sprint:["SPRINT 40L","스프린트 40줄"],
+  m_versus:["VERSUS","대전"],
+  net_tag:["Peer to peer, no game server","게임 서버 없는 1:1 연결"],
+  ok_linking:["Linking up…","연결하는 중…"],
+  ok_sendback:["Now send this reply code back. The match starts as soon as they paste it.","이제 이 답장 코드를 보내세요. 상대가 붙여넣으면 바로 시작됩니다."],
+  on_none:["No open rooms. Make one and wait.","열린 방이 없습니다. 방을 만들고 기다려 보세요."],
+  on_seats:["{n}/{max} in the room","{max}명 중 {n}명"],
+  opponent:["OPPONENT","상대"],
+  pad_none:["none connected","연결된 패드 없음"],
+  ph_chat:["Write something…","메시지를 입력하세요…"],
+  ph_fb:["https://your-project-default-rtdb.firebaseio.com","https://your-project-default-rtdb.firebaseio.com"],
+  ph_gen:["generating…","생성 중…"],
+  ph_host:["paste the host code here","방장 코드를 붙여넣으세요"],
+  ph_name:["YOUR NAME","이름"],
+  ph_reply:["paste your friend's reply code","친구의 답장 코드를 붙여넣으세요"],
+  pv_centred:["centred","가운데"],
+  pv_default:["default","기본"],
+  pv_down:["lower","아래로"],
+  pv_in:["toward the screen","화면쪽"],
+  pv_out:["toward the edges","바깥쪽"],
+  pv_up:["raised","위로"],
+  rec_empty:["—","—"],
+  rec_marathon:["BEST MARATHON SCORE","마라톤 최고 점수"],
+  rec_speed:["BEST SPEED LINES · {d}","스피드 최고 줄 수 · {d}"],
+  rec_sprint:["BEST 40 LINE TIME","40줄 최고 기록"],
+  rec_t:["RECORDS","기록"],
+  rec_tag:["Kept on this device","이 기기에 저장됩니다"],
+  rec_wins:["VERSUS WINS","대전 승리"],
+  room_alone:["A match needs two. Invite someone, or share the room code.","대전은 2명부터 시작합니다. 친구를 초대하거나 방 코드를 공유하세요."],
+  room_code:["ROOM {c}","방 {c}"],
+  room_empty_seat:["Open seat","빈 자리"],
+  room_hint:["The match starts as soon as you are both ready.","두 사람이 모두 준비하면 바로 시작합니다."],
+  room_hint_n:["{n} in the room. Everyone readies up, then it starts. Up to four.","방에 {n}명. 모두 준비하면 시작합니다. 최대 4명."],
+  room_leave:["LEAVE","나가기"],
+  room_of:["{n}'S ROOM","{n}의 방"],
+  room_ready:["READY","준비 완료"],
+  room_t:["ROOM","대기실"],
+  room_unready:["CANCEL READY","준비 취소"],
+  room_wins:["WINS","승"],
+  room_you:["YOU","나"],
+  rule_attack:["ATTACK","공격전"],
+  rule_attack_s:["Clears send garbage across. The last well standing wins.","줄을 지우면 상대에게 방해 줄이 갑니다. 마지막까지 남은 사람이 승리합니다."],
+  rule_locked:["The host picks it.","방장이 정합니다."],
+  rule_score:["HIGH SCORE","점수전"],
+  rule_score_s:["Three minutes, nothing sent across. The highest score wins.","3분 동안 방해 줄 없이 겨루고, 점수가 가장 높은 사람이 승리합니다."],
+  set_appearance:["Appearance","외관"],
+  set_arr:["ARR — auto-shift repeat","ARR — 자동 이동 간격"],
+  set_bg:["Background","배경"],
+  set_bg_bright:["Brightness","밝기"],
+  set_bind_hint:["Tap a row, then press the key you want. A key can only do one thing, so it is taken off anything else.","항목을 누른 뒤 원하는 키를 입력하세요. 한 키는 한 동작에만 배정되며 기존 배정은 해제됩니다."],
+  set_boardsize:["Board size","보드 크기"],
+  set_bob:["Board give","보드 반동"],
+  set_btnsize:["Button size","버튼 크기"],
+  set_btnx:["Spread","좌우 간격"],
+  set_btny:["Vertical position","세로 위치"],
+  set_ctlreset:["RESET CONTROLS","컨트롤 초기화"],
+  set_dark:["Dark","다크"],
+  set_das:["DAS — delay before auto-shift","DAS — 자동 이동 시작 지연"],
+  set_dpad:["D-PAD","D패드"],
+  set_dpad_s:["On-screen d-pad and buttons below or beside the well.","화면에 D패드와 버튼이 표시됩니다."],
+  set_ghost:["Ghost piece","고스트 블록"],
+  set_grid:["Board grid","보드 격자"],
+  set_handling:["Handling","조작감"],
+  set_id:["Identity","이름"],
+  set_id_hint:["Shown to your opponent once you connect.","연결하면 상대에게 표시됩니다."],
+  set_lang:["Language","언어"],
+  set_light:["Light","라이트"],
+  set_off:["OFF","끄기"],
+  set_off_s:["No on-screen controls. Play with the keyboard or a gamepad.","화면 조작을 사용하지 않습니다. 키보드나 게임패드로 플레이하세요."],
+  set_padbind_hint:["Tap a row, then press the button. Defaults follow where TETRIS 99 puts each action on the pad.","항목을 누른 뒤 버튼을 누르세요. 기본값은 TETRIS 99의 버튼 배치를 따릅니다."],
+  set_paduse:["Use a controller","컨트롤러 사용"],
+  set_pres:["Presentation","화면"],
+  set_reset_keys:["RESET TO TETR.IO DEFAULTS","TETR.IO 기본값으로"],
+  set_reset_pad:["RESET TO TETRIS 99 LAYOUT","TETRIS 99 배치로"],
+  set_sdf:["SDF — soft drop speed","SDF — 소프트 드롭 속도"],
+  set_sig:["Signaling","시그널링"],
+  set_sig_hint:["Firebase Realtime Database URL. It carries the room list and the match itself, so you can play on networks that block a direct link. Swapping codes by hand never touches it.","Firebase 실시간 데이터베이스 주소. 방 목록과 경기 자체를 전달하므로 직접 연결이 막힌 네트워크에서도 플레이할 수 있습니다. 코드를 직접 주고받는 방식은 이 주소를 사용하지 않습니다."],
+  set_snd:["Sound effects","효과음"],
+  set_sound:["Sound","소리"],
+  set_sound_hint:["Every sound is generated as it plays — there are no audio files to load.","모든 소리는 재생 시점에 직접 합성됩니다. 불러오는 음원 파일이 없습니다."],
+  set_swap:["D-pad on the right","방향키를 오른쪽에"],
+  set_swap_s:["Swaps the D-pad and the A/B buttons.","방향키와 A/B 버튼의 위치를 바꿉니다."],
+  set_swdrop:["Drag to drop one row","한 줄 드롭 거리"],
+  set_swflick:["Flick speed for a hard drop","하드 드롭 튕김 속도"],
+  set_swipe:["SWIPE","스와이프"],
+  set_swipe_s:["No buttons: drag sideways to move, drag down to soft drop, flick down to hard drop, drag up to hold, tap to rotate.","버튼 없이 조작합니다. 좌우로 끌면 이동, 아래로 끌면 소프트 드롭, 아래로 튕기면 하드 드롭, 위로 끌면 홀드, 탭하면 회전."],
+  set_swmove:["Drag to move one cell","한 칸 이동 거리"],
+  set_swreset:["RESET SENSITIVITY","감도 초기화"],
+  set_system:["System","시스템"],
+  set_theme:["Theme","테마"],
+  set_vol:["Volume","음량"],
+  sp_easy:["EASY","쉬움"],
+  sp_hard:["HARD","어려움"],
+  sp_hint:["The bar under the well is the time you have left. Clearing any line fills it again; letting it empty ends the run. Gravity still climbs a level every ten lines.","보드 아래 막대가 남은 시간입니다. 줄을 지우면 다시 채워지고, 모두 비면 게임이 끝납니다. 10줄마다 레벨이 올라가는 것은 그대로입니다."],
+  sp_normal:["NORMAL","보통"],
+  srv_list:["ROOM LIST","방 목록"],
+  srv_make:["CREATE ROOM","방 만들기"],
+  st_answering:["REPLY READY","답장 준비됨"],
+  st_connected:["CONNECTED","연결됨"],
+  st_failed:["FAILED","실패"],
+  st_idle:["IDLE","대기"],
+  st_linking:["CONNECTING…","연결 중…"],
+  st_offering:["CODE READY","코드 준비됨"],
+  st_preparing:["PREPARING…","준비 중…"],
+  st_relayed:["RELAYED","중계 연결"],
+  st_waiting:["WAITING FOR A CODE","코드 기다리는 중"],
+  status:["STATUS","상태"],
+  theme_default:["Default","기본"],
+  theme_default_s:["The board as it's always looked — no background, the system font, and the classic tiles.","지금까지의 기본 모습입니다 — 배경 없이, 시스템 글꼴과 클래식 블록을 사용합니다."],
+  u_cellpct:["{v}% of a cell","한 칸의 {v}%"],
+  u_cps:["{v} cells/sec","초당 {v}칸"],
+  u_flick:["{v} — {n}","{v} — {n}"],
+  u_instant:["instant (0 ms)","즉시 (0 ms)"],
+  u_ms:["{v} ms","{v} ms"],
+  working:["working…","처리 중…"]
 };
 function T(key,vars){
   const row=I18N[key];
@@ -443,6 +1144,12 @@ function applyLang(){
   });
   $$("[data-i18n-ph]").forEach(el=>{ el.placeholder=T(el.dataset.i18nPh); });
   $$("[data-i18n-aria]").forEach(el=>{ el.setAttribute("aria-label",T(el.dataset.i18nAria)); });
+  $$(".lang").forEach(b=>b.classList.toggle("on",b.dataset.lang===CFG.lang));
+  if(typeof UI!=="undefined"){
+    UI.renderRecords(); UI.renderRoom();
+    if(UI.cur==="#v-set") UI.openTab(TAB);
+  }
+  if(typeof repaintSettings==="function") repaintSettings();
 }
 
 /* 1 · AUDIO — tiny WebAudio synth, no assets */
@@ -2978,17 +3685,57 @@ const Net = {
 };
 
 /* 8 · UI */
-/* What's left once the menu, lobby, and settings screens are gone: the state
-   that used to flow into DOM those screens rendered, kept here so the run
-   itself and the networking beneath it still work exactly as before —
-   there is simply nothing on screen reading it yet. */
-const UI = {
-  cur:null,
+const esc = s => String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 
-  closeAll(){
-    this.cur=null;
+/* Where BACK goes from each screen. */
+const PARENT = {
+  "#v-play":  "#v-home",
+  "#v-set":   "#v-home",
+  "#v-speed": "#v-play",
+  "#v-records":"#v-play",
+  "#v-lobby": "#v-play",
+  "#v-host":  "#v-lobby",
+  "#v-join":  "#v-lobby"
+};
+const NET_SCREENS = {"#v-host":1,"#v-join":1};
+const EXIT_MS=430;
+function afterScreen(fn){ setTimeout(fn,EXIT_MS); }
+
+const UI = {
+  cur:"#v-home",
+
+  show(id,inner){
+    const from=this.cur;
+    if(id && from && id!==from){
+      this.board(id);
+      this.show(null,true);
+      afterScreen(()=>this.show(id,false));
+      return;
+    }
+    if(!inner) this.board(id);
+    $$(".veil").forEach(v=>{
+      if(v.classList.contains("on")) v.classList.add("out");
+      v.classList.remove("on","fwd");
+    });
+    if(id){
+      const el=$(id);
+      el.classList.remove("out");
+      el.classList.add("fwd");
+      const c=el.querySelector(".card");
+      if(c) this._flush=getComputedStyle(c).transform;   // force the parked position to take before the next frame
+      el.classList.add("on");
+      this.cur=id;
+    }else this.cur=null;
     document.body.classList.toggle("playing",!!G && !this.cur);
     $("#screen").classList.toggle("live",!!G);
+  },
+  board(id){ $("#screen").classList.toggle("live", !!G && !id); },
+  closeAll(){ this.show(null); },
+  back(from){
+    const src=from||this.cur;
+    const to=PARENT[src]||"#v-home";
+    if(NET_SCREENS[src]) Net.reset();
+    this.show(to);
   },
 
   togglePause(){
@@ -2998,44 +3745,231 @@ const UI = {
     G.paused=true; Input.reset();
   },
 
-  netStatus(){},
-  diag(){},
-  renderRoom(){},
-  renderInvitables(){},
-  renderPeople(){},
+  /* records */
+  showRecords(){ this.renderRecords(); this.show("#v-records"); },
+  renderRecords(){
+    const el=$("#rec-list");
+    if(!el) return;
+    const dash=T("rec_empty");
+    const rows=[
+      [T("rec_marathon"), REC.marathon>0 ? REC.marathon.toLocaleString() : dash],
+      [T("rec_sprint"),   REC.sprint>0   ? REC.sprint.toFixed(2)+"s"     : dash],
+      [T("rec_wins"),     REC.wins>0     ? String(REC.wins)              : dash],
+      ...["easy","normal","hard"].map(d=>
+        [T("rec_speed",{d:T("sp_"+d)}), REC.speed[d]>0 ? String(REC.speed[d]) : dash])
+    ];
+    el.innerHTML=rows.map(([k,v])=>
+      '<div class="rec'+(v===dash?" none":"")+'"><span class="k">'+esc(k)+
+      '</span><span class="v">'+esc(v)+'</span></div>').join("");
+  },
 
+  /* lobby / server */
+  async doOnline(){ this.refreshRooms(); clearInterval(this._rooms); this._rooms=setInterval(()=>{ if(this.cur==="#v-lobby") this.refreshRooms(); },3000); },
+  async refreshRooms(){
+    const list=$("#on-list");
+    if(!list) return;
+    try{
+      const rooms=await Net.listRooms();
+      if(!rooms.length){ list.innerHTML='<p class="diag" id="on-none">'+esc(T("on_none"))+'</p>'; return; }
+      list.innerHTML=rooms.map(r=>
+        '<button class="mi room" data-room="'+esc(r.id)+'"><span>'+esc(r.name||T("opponent"))+
+        '</span><span class="sub">'+esc(T("on_seats",{n:r.count||1,max:MAX_SEATS}))+'</span></button>').join("");
+      list.querySelectorAll("[data-room]").forEach(b=>b.onclick=()=>this.doJoinRoom(b.dataset.room));
+    }catch(e){ this.err("#srv-hint",e.message,true); }
+  },
+  async doMakeRoom(){
+    Sfx.ui();
+    Net.reset();
+    clearInterval(this._rooms);
+    try{ await Net.openRoom(); this.showRoom(); }
+    catch(e){ this.err("#srv-hint",e.message,true); }
+  },
+  async doJoinRoom(id){
+    Sfx.ui();
+    try{ await Net.joinRoom(id); this.showRoom(); }
+    catch(e){ this.err("#srv-hint",e.message,true); this.refreshRooms(); }
+  },
+
+  /* peer-to-peer host/join */
+  async doHost(){
+    this.show("#v-host");
+    $("#h-out").value=""; $("#h-in").value="";
+    $("#hs").textContent=T("st_preparing"); $("#hs").className="wait";
+    try{ await Net.createOffer(); }
+    catch(e){ this.err("#h-hint",T("e_make",{m:e.message}),true); }
+    $("#h-out").value=Net.offerCode||"";
+    this.netStatus();
+  },
+  async doAnswer(){
+    const input=$("#j-in").value.trim();
+    if(!input){ this.err("#j-hint",T("e_pastehost")); return; }
+    $("#j-out").value=T("working");
+    try{ $("#j-out").value=await Net.createAnswer(input); this.ok("#j-hint",T("ok_sendback")); }
+    catch(e){ $("#j-out").value=""; this.err("#j-hint",e.message); }
+    this.netStatus();
+  },
+  async doAccept(){
+    const input=$("#h-in").value.trim();
+    if(!input){ this.err("#h-hint",T("e_pastereply")); return; }
+    try{ await Net.acceptAnswer(input); this.ok("#h-hint",T("ok_linking")); }
+    catch(e){ this.err("#h-hint",e.message); }
+    this.netStatus();
+  },
+  async copy(sel,hintSel){
+    const t=$(sel);
+    if(!t.value) return;
+    let ok=false;
+    try{ if(navigator.clipboard && window.isSecureContext){ await navigator.clipboard.writeText(t.value); ok=true; } }catch(e){}
+    if(!ok){
+      try{
+        const tmp=document.createElement("textarea");
+        tmp.value=t.value; tmp.setAttribute("readonly","");
+        tmp.style.cssText="position:fixed;top:0;left:0;opacity:0;font-size:16px";
+        document.body.appendChild(tmp);
+        tmp.contentEditable="true"; tmp.focus(); tmp.setSelectionRange(0,t.value.length);
+        ok=document.execCommand("copy");
+        document.body.removeChild(tmp);
+      }catch(e){ ok=false; }
+    }
+    Sfx.ui();
+    if(hintSel){
+      if(ok) this.ok(hintSel,T("copied"));
+      else{ this.err(hintSel,T("copyfail")); t.focus(); t.setSelectionRange(0,t.value.length); }
+    }
+  },
+  netStatus(){
+    const label=Net.mode==="relay"&&Net.state==="connected" ? T("st_relayed") : T({
+      idle:"st_idle", offering:"st_offering", answering:"st_answering",
+      linking:"st_linking", connected:"st_connected", failed:"st_failed"
+    }[Net.state]||"st_idle");
+    const hs=$("#hs"), js=$("#js");
+    const cls=Net.state==="connected"?"":Net.state==="failed"?"bad":"wait";
+    if(hs){ if(Net.role==="host"){ hs.textContent=label; hs.className=cls; } else if(Net.state==="idle"){ hs.textContent=T("st_preparing"); } }
+    if(js){ if(Net.role==="guest"){ js.textContent=label; js.className=cls; } else if(Net.state==="idle"){ js.textContent=T("st_waiting"); } }
+  },
+  diag(){
+    const st=Net.stats;
+    const el=Net.role==="guest"?$("#j-diag"):$("#h-diag");
+    if(!el||Net.mode==="relay") return;
+    el.textContent=[T("d_local")+" "+st.host, T("d_public")+" "+st.srflx, T("d_link")+" "+st.conn.toUpperCase()].join(" · ");
+  },
+  stillWaiting(){
+    const el=$(Net.role==="guest"?"#j-hint":"#h-hint");
+    if(el){ if(el.dataset.orig===undefined) el.dataset.orig=el.innerHTML; el.textContent=T("e_waiting"); }
+    this.diag();
+  },
+  connectFailed(why){
+    Net.clearWatchdog();
+    const st=Net.stats;
+    let msg;
+    if(why==="relay") msg=T("e_relay");
+    else if(st.srflx===0) msg=T("e_nostun");
+    else if(why==="ice") msg=T("e_direct");
+    else msg=T("e_generic");
+    if(why==="timeout") msg=T("e_timeout")+" "+msg;
+    this.err(Net.role==="guest"?"#j-hint":"#h-hint",msg,true);
+    Net.setState("failed");
+    this.diag();
+  },
+  gotInvite(){},   // no invite/presence UI in this build
+
+  /* room */
+  peerJoined(){ if(G && G.mode==="versus" && !G.over) return; Sfx.win(); this.showRoom(); },
+  showRoom(){ this.renderRoom(); this.show("#v-room"); },
   isHost(){ return Room.on ? Room.host : Net.role==="host"; },
   setRule(r){
     if(!this.isHost() || NET_RULE===r) return;
     NET_RULE=r;
     if(Room.on) Room.pushRule(); else Net.send({t:"m",r});
+    this.paintRule();
   },
-
+  paintRule(){
+    const host=this.isHost(), live=!!(G && G.mode==="versus" && !G.over);
+    $$(".rule").forEach(b=>{ b.classList.toggle("on",b.dataset.rule===NET_RULE); b.disabled=!host||live; });
+    const h=$("#rule-hint");
+    if(h) h.textContent=T(NET_RULE==="score"?"rule_score_s":"rule_attack_s")+(host?"":" "+T("rule_locked"));
+  },
   setReady(v){
-    if(Room.on){ Room.set("rdy",v); const m=Room.me(); if(m) m.rdy=v; return; }
+    if(Room.on){ Room.set("rdy",v); const m=Room.me(); if(m) m.rdy=v; this.renderRoom(); return; }
     if(!Net.ready()) return;
     READY_P2P.me=v; Net.send({t:"r",v});
+    this.renderRoom();
     if(READY_P2P.me&&READY_P2P.peer) startMatch();
   },
-  peerReady(v){
-    READY_P2P.peer=v;
-    if(READY_P2P.me&&READY_P2P.peer) startMatch();
-  },
+  peerReady(v){ READY_P2P.peer=v; this.renderRoom(); if(READY_P2P.me&&READY_P2P.peer) startMatch(); },
+  renderRoom(){
+    const host=$("#seatlist");
+    if(!host) return;
+    const inRoom=Room.on;
+    const me=inRoom?Room.me():null;
+    const players=inRoom?Room.players
+      :(Net.ready()?[{pid:PID,n:CFG.name,rdy:READY_P2P.me,w:WINS_P2P.me},
+                     {pid:"peer",n:Net.peerName||T("opponent"),rdy:READY_P2P.peer,w:WINS_P2P.peer}]:[]);
+    const title=$("#room-title");
+    if(title) title.textContent = players.length ? T("room_of",{n:(players[0]||{}).n||CFG.name}) : T("room_t");
+    const code=$("#room-code");
+    if(code) code.textContent = Room.on ? T("room_code",{c:Room.id}) : T("net_tag");
 
-  peerJoined(){ if(G && G.mode==="versus" && !G.over) return; Sfx.win(); },
-  peerLost(){
-    Net.reset();
-    READY_P2P.me=READY_P2P.peer=false;
-    if(G && !G.over && G.mode==="versus") G.paused=true;
+    const cards=[];
+    for(let i=0;i<MAX_SEATS;i++){
+      const p=players[i];
+      if(!p){ cards.push('<div class="seat-card empty">'+esc(T("room_empty_seat"))+'</div>'); continue; }
+      const you=p.pid===PID;
+      cards.push('<div class="seat-card'+(p.rdy?" ready":"")+(you?" mine":"")+'" data-pid="'+esc(p.pid)+'">'+
+        '<div class="w">'+(p.w|0)+'<small>'+esc(T("room_wins"))+'</small></div>'+
+        '<div class="nm">'+esc(p.n)+(you?" · "+esc(T("room_you")):"")+'</div></div>');
+    }
+    host.innerHTML=cards.join("");
+
+    const btn=$("#b-ready");
+    const mine=inRoom?!!(me&&me.rdy):READY_P2P.me;
+    if(btn){ btn.textContent=T(mine?"room_unready":"room_ready"); btn.classList.toggle("ready",mine); btn.disabled=players.length<2; }
+
+    const hint=$("#room-hint");
+    if(hint && hint.dataset.orig===undefined) hint.textContent = players.length<2 ? T("room_alone") : T("room_hint_n",{n:players.length});
+
+    this.paintRule();
+    this.renderChat(players);
+  },
+  /* A message is a bubble over the sender's own card, not a log: the last
+     entry that arrived since renderRoom last ran gets shown, then clears
+     itself a few seconds later. */
+  renderChat(players){
+    const log=Room.on?Room.chat:[];
+    if(log.length<=(this._chatSeen||0)){ this._chatSeen=log.length; return; }
+    const fresh=log.slice(this._chatSeen||0);
+    this._chatSeen=log.length;
+    for(const m of fresh){
+      const p=(players||Room.players).find(p=>p.n===m.n);
+      const card=p && $('.seat-card[data-pid="'+CSS.escape(p.pid)+'"]');
+      if(!card) continue;
+      card.querySelectorAll(".chat-bubble").forEach(b=>b.remove());
+      const b=document.createElement("div");
+      b.className="chat-bubble";
+      b.textContent=m.m;
+      card.appendChild(b);
+      requestAnimationFrame(()=>b.classList.add("show"));
+      setTimeout(()=>{ b.classList.remove("show"); setTimeout(()=>b.remove(),300); },3600);
+    }
+  },
+  leaveRoom(){
+    clearInterval(this._rooms);
+    Net.reset(); READY_P2P.me=READY_P2P.peer=false;
+    this.show("#v-lobby");
+    afterScreen(()=>{ G=null; FOES=[]; render(null); document.body.classList.remove("playing"); });
   },
   roomGone(){
     if(!Room.on) return;
     Room.stop(); Net.reset();
     if(G && !G.over && G.mode==="versus") G.paused=true;
+    else if(this.cur==="#v-room"){ this.show("#v-lobby"); this.err("#lob-hint",T("e_roomgone")); }
   },
-  connectFailed(){ Net.clearWatchdog(); Net.setState("failed"); },
-  stillWaiting(){ this.diag(); },
-  gotInvite(){},   // nothing left to accept it from
+  peerLost(){
+    Net.reset();
+    READY_P2P.me=READY_P2P.peer=false;
+    if(G && !G.over && G.mode==="versus") G.paused=true;
+    else if(this.cur==="#v-room"){ this.show("#v-lobby"); this.err("#lob-hint",T("e_peerleft")); }
+  },
 
   matchPending(){},
   tallied(won,tie,best){
@@ -3044,12 +3978,51 @@ const UI = {
     else if(won) WINS_P2P.me++;
     else if(!tie) WINS_P2P.peer++;
     if(won) Sfx.win();
+    this.renderRoom();
   },
   gameOver(won){
     if(G.mode==="versus" && Net.mode!=="room"){ if(won) WINS_P2P.me++; else WINS_P2P.peer++; }
     noteRun(G,won,((G.endedAt||now())-G.startedAt)/1000);
+    this.renderRoom();
+  },
+
+  /* settings */
+  openSettings(){ this.show("#v-set"); this.openTab(TAB); },
+  openTab(name){
+    TAB=name;
+    $$("#set-rail [data-tab]").forEach(b=>b.classList.toggle("on",b.dataset.tab===name));
+    $$("#v-set .panel").forEach(p=>p.classList.toggle("on",p.dataset.panel===name));
+    if(name==="controls"){ repaintSettings(); paintTouch(); bindRows("#keylist","keys"); bindRows("#padlist","pads"); paintPad(); }
+    if(name==="video"){ paintTheme(); paintUiTheme(); }
+    if(name==="audio") repaintSettings();
+  },
+
+  err(sel,msg,stay){ this.flash(sel,msg,"#ff7b8a",stay); },
+  ok(sel,msg){ this.flash(sel,msg,"#4fe0a8"); },
+  flash(sel,msg,color,stay){
+    const el=$(sel); if(!el) return;
+    if(el.dataset.orig===undefined) el.dataset.orig=el.innerHTML;
+    el.innerHTML='<b style="color:'+color+'">'+esc(msg)+'</b>';
+    clearTimeout(this["_t"+sel]);
+    if(stay) return;
+    this["_t"+sel]=setTimeout(()=>{ if(el.dataset.orig!==undefined) el.innerHTML=el.dataset.orig; },5000);
   }
 };
+
+/* A rail/panel split behaves the same way in Settings and the lobby: pick
+   an item, its panel opens (mobile: replaces the list; wide: already
+   beside it), the small back link only ever needs to clear one class. */
+function splitSelect(splitId,itemSel,groupAttr){
+  const root=$(splitId);
+  root.querySelectorAll(itemSel).forEach(b=>b.addEventListener("click",()=>{
+    Sfx.ui();
+    root.querySelectorAll(itemSel).forEach(o=>o.classList.toggle("on",o===b));
+    root.querySelectorAll(".panel-area>[data-panel]").forEach(p=>p.classList.toggle("on",p.dataset.panel===b.dataset[groupAttr]));
+    root.classList.add("panel-open");
+  }));
+  root.querySelector(".panel-back")?.addEventListener("click",()=>{ Sfx.ui(); root.classList.remove("panel-open"); });
+}
+splitSelect("#lobby-split","[data-panel]","panel");
 
 /* Touch layout preferences, applied on their own since nothing on screen
    sets them anymore. */
@@ -3060,6 +4033,295 @@ function applyTouchMode(){
   document.body.classList.toggle("notouch",CFG.touch==="off");
   layout();
 }
+
+/* menu wiring */
+document.addEventListener("pointerdown",e=>{
+  const el=e.target.closest && e.target.closest(".mi");
+  if(!el) return;
+  el.classList.add("lit");
+  clearTimeout(el._lit);
+  el._lit=setTimeout(()=>el.classList.remove("lit"),500);
+},true);
+
+$$("[data-go]").forEach(b=>b.onclick=()=>{
+  Sfx.unlock(); Sfx.ui();
+  const go=b.dataset.go;
+  if(go==="solo"||go==="sprint"){ UI.closeAll(); afterScreen(()=>startGame(go)); }
+  else if(go==="play") UI.show("#v-play");
+  else if(go==="versus"){ Net.reset(); UI.show("#v-lobby"); }
+  else if(go==="speed") UI.show("#v-speed");
+  else if(go==="records") UI.showRecords();
+  else if(go==="settings") UI.openSettings();
+  else if(go==="host") UI.doHost();
+  else if(go==="join") UI.show("#v-join");
+});
+$$("[data-back]").forEach(b=>b.onclick=()=>{ Sfx.ui(); UI.back("#"+b.closest(".veil").id); });
+
+$$("[data-speed]").forEach(b=>b.onclick=()=>{
+  Sfx.unlock(); Sfx.ui();
+  CFG.speedDiff=b.dataset.speed; saveCfg();
+  UI.closeAll();
+  afterScreen(()=>startGame("speed"));
+});
+
+/* lobby / server */
+$("#b-mkroom").onclick=()=>UI.doMakeRoom();
+UI.doOnline();
+document.addEventListener("visibilitychange",()=>{ if(!document.hidden && UI.cur==="#v-lobby") UI.refreshRooms(); });
+
+/* peer-to-peer host/join */
+$("#h-copy").onclick=()=>UI.copy("#h-out","#h-hint");
+$("#h-connect").onclick=()=>UI.doAccept();
+$("#j-go").onclick=()=>UI.doAnswer();
+$("#j-copy").onclick=()=>UI.copy("#j-out","#j-hint");
+$("#h-in").addEventListener("paste",()=>setTimeout(()=>UI.doAccept(),60));
+$("#j-in").addEventListener("paste",()=>setTimeout(()=>UI.doAnswer(),60));
+
+/* room */
+$("#b-ready").onclick=()=>{
+  Sfx.ui();
+  const m=Room.on?Room.me():null;
+  UI.setReady(!(Room.on?!!(m&&m.rdy):READY_P2P.me));
+};
+$$(".rule").forEach(b=>b.onclick=()=>{ Sfx.ui(); UI.setRule(b.dataset.rule); });
+$("#b-leave").onclick=()=>{ Sfx.ui(); UI.leaveRoom(); };
+$("#b-chat-toggle").onclick=()=>{
+  Sfx.ui();
+  const bar=$("#chatbar");
+  const open=bar.classList.toggle("on");
+  $("#b-chat-toggle").classList.toggle("on",open);
+  if(open) $("#chat-in").focus();
+};
+$("#chatbar").addEventListener("submit",e=>{
+  e.preventDefault();
+  const el=$("#chat-in");
+  const t=el.value;
+  el.value="";
+  if(t.trim() && Room.on){ Room.say(t); Sfx.ui(); }
+});
+
+/* settings wiring */
+const rangePainters=[];
+function bindRange(id,key,label,fmt,after,scale){
+  const el=$(id), lb=$(label);
+  el.value=CFG[key]*(scale||1);
+  const paint=()=>lb.textContent=fmt(CFG[key]);
+  el.oninput=()=>{ CFG[key]=(+el.value)/(scale||1); paint(); saveCfg(); if(after) after(); };
+  rangePainters.push(()=>{ el.value=CFG[key]*(scale||1); paint(); });
+  paint();
+}
+bindRange("#s-das","das","#l-das",v=>T("u_ms",{v}));
+bindRange("#s-arr","arr","#l-arr",v=>v===0?T("u_instant"):T("u_ms",{v}));
+bindRange("#s-sdf","sdf","#l-sdf",v=>T("u_cps",{v}));
+bindRange("#s-vol","vol","#l-vol",v=>v+"%",()=>Sfx.setVol());
+
+bindRange("#s-btn","btnScale","#l-btn",v=>{
+  const {W,H}=viewportBox();
+  return Math.round(v*100)+"% · "+solve(W,H,v,CFG.btnY,CFG.btnX,CFG.touch!=="dpad").ctl+"px";
+},layout,100);
+bindRange("#s-bty","btnY","#l-bty",
+  v=>v===0?T("pv_centred"):(v>0?T("pv_up"):T("pv_down"))+" "+Math.abs(v)+"%",layout);
+bindRange("#s-btx","btnX","#l-btx",
+  v=>v===0?T("pv_default"):(v>0?T("pv_out"):T("pv_in"))+" "+Math.abs(v)+"%",layout);
+bindRange("#s-boardsize","boardScale","#l-boardsize",v=>Math.round(v*100)+"%",layout,100);
+
+$("#b-ctlreset").onclick=()=>{
+  Sfx.ui();
+  CFG.btnScale=1; CFG.btnY=0; CFG.btnX=0; CFG.swap=false;
+  saveCfg();
+  $("#s-swap").classList.remove("on");
+  applyControlSide(); applyTouchMode();
+  repaintSettings();
+  layout();
+};
+function repaintSettings(){ rangePainters.forEach(p=>p()); }
+
+/* Which panel settings opens on, remembered for as long as the page lives. */
+let TAB="general";
+$$("#set-rail [data-tab]").forEach(b=>b.onclick=()=>{
+  Sfx.ui();
+  UI.openTab(b.dataset.tab);
+  $("#set-split").classList.add("panel-open");
+});
+$("#set-panelback").onclick=()=>{ Sfx.ui(); $("#set-split").classList.remove("panel-open"); };
+
+/* <details> puts its block on screen the instant it opens, with no height to
+   travel through, so the move is run here: measure where the block wants to
+   end up, drive it from nothing to that, then hand the height back so it can
+   reflow on its own again. Closing is the same in reverse. */
+const REDUCED = matchMedia("(prefers-reduced-motion:reduce)");
+const FOLD_MS = 300;
+const FOLDS = $$(".fold").map(d=>{
+  const body=d.querySelector(".foldbody");
+  const stop=()=>{
+    clearTimeout(d._ft);
+    if(d._end){ body.removeEventListener("transitionend",d._end); d._end=null; }
+  };
+  const settle=()=>{ stop(); body.style.height=""; d._busy=false; };
+  const onEnd=fn=>{
+    stop();
+    d._end=e=>{ if(e.target===body && e.propertyName==="height") fn(); };
+    body.addEventListener("transitionend",d._end);
+    d._ft=setTimeout(fn,FOLD_MS+120);
+  };
+  const open=()=>{
+    d.open=true;
+    if(REDUCED.matches){ settle(); return; }
+    d._busy=true;
+    const h=body.scrollHeight;
+    body.style.height="0px";
+    requestAnimationFrame(()=>{ body.style.height=h+"px"; });
+    onEnd(settle);
+  };
+  const close=()=>{
+    if(!d.open) return;
+    if(REDUCED.matches){ d.open=false; settle(); return; }
+    d._busy=true;
+    body.style.height=body.getBoundingClientRect().height+"px";
+    requestAnimationFrame(()=>{ body.style.height="0px"; });
+    onEnd(()=>{ d.open=false; settle(); });
+  };
+  return {el:d, open, close};
+});
+FOLDS.forEach(f=>{
+  f.el.querySelector("summary").addEventListener("click",e=>{
+    e.preventDefault();
+    Sfx.ui();
+    if(f.el._busy) return;
+    if(f.el.open){ f.close(); return; }
+    FOLDS.forEach(o=>{ if(o!==f) o.close(); });
+    f.open();
+  });
+});
+
+/* The connected pad's name, and whether we are listening to it at all. */
+function paintPad(){
+  $("#s-padon").classList.toggle("on",CFG.padOn);
+  const pads=navigator.getGamepads?[...navigator.getGamepads()].filter(Boolean):[];
+  $("#pad-state").textContent=pads.length?pads[0].id.slice(0,32):T("pad_none");
+}
+
+const KEYFIX={ArrowLeft:"LEFT",ArrowRight:"RIGHT",ArrowUp:"UP",ArrowDown:"DOWN",
+              Space:"SPACE",Escape:"ESC",Enter:"ENTER",Tab:"TAB",Backspace:"BKSP"};
+const KEYNAME = c => KEYFIX[c] || String(c||"")
+  .replace(/^(Key|Digit)/,"").replace(/^Numpad/,"NUM ")
+  .replace(/^(Control|Shift|Alt|Meta)(Left|Right)$/,(_,m,side)=>({Control:"CTRL",Shift:"SHIFT",Alt:"ALT",Meta:"META"}[m]+" "+side[0]))
+  .toUpperCase();
+const PADNAME = i => ({0:"BOTTOM",1:"RIGHT",2:"LEFT",3:"TOP",4:"L",5:"R",6:"ZL",7:"ZR",
+                       8:"SELECT",9:"START",12:"D-UP",13:"D-DOWN",14:"D-LEFT",15:"D-RIGHT"})[i]||("BTN "+i);
+
+/* One row per action; tapping a row waits for the next key or button. */
+function bindRows(host,which){
+  const el=$(host);
+  if(!el) return;
+  const binds=which==="keys"?CFG.keys:CFG.pads;
+  const name=which==="keys"?KEYNAME:PADNAME;
+  el.innerHTML=ACTIONS.map(a=>
+    '<div class="sp bindrow" data-act="'+a+'"><span>'+esc(T("act_"+a))+'</span><b>'+
+    esc(binds[a].map(name).join(" · ")||T("act_none"))+'</b></div>').join("");
+  el.querySelectorAll("[data-act]").forEach(row=>row.onclick=()=>{
+    const act=row.dataset.act;
+    row.classList.add("binding");
+    row.querySelector("b").textContent=T("act_press");
+    const done=code=>{
+      for(const a of ACTIONS) binds[a]=binds[a].filter(c=>c!==code);
+      binds[act]=[code];
+      saveCfg();
+      BINDING=null; Pad.watching=null;
+      bindRows(host,which);
+    };
+    if(which==="keys") BINDING=done; else Pad.watching=done;
+  });
+}
+
+$$(".theme").forEach(b=>b.onclick=()=>{
+  if(CFG.theme===b.dataset.theme) return;
+  Sfx.ui();
+  CFG.theme=b.dataset.theme; saveCfg();
+  applyTheme(); paintTheme();
+});
+$$(".uitheme").forEach(b=>b.onclick=()=>{
+  if(CFG.uiTheme===b.dataset.uitheme) return;
+  Sfx.ui();
+  CFG.uiTheme=b.dataset.uitheme; saveCfg();
+  applyUiTheme(); paintUiTheme();
+});
+function paintUiTheme(){
+  $$(".uitheme").forEach(b=>b.classList.toggle("on",b.dataset.uitheme===CFG.uiTheme));
+}
+paintUiTheme();
+
+function paintTheme(){
+  $$(".theme").forEach(b=>b.classList.toggle("on",b.dataset.theme===CFG.theme));
+  const el=$("#theme-hint");
+  if(el) el.textContent=T("theme_"+CFG.theme+"_s");
+  const on=!!THEME.background;
+  $("#bg-brightrow").hidden=!on;
+  const bg=$("#bg-hint");
+  if(bg) bg.textContent=T(on?"bg_hint_set":"bg_hint_off");
+}
+bindRange("#s-bg","bgBright","#l-bg",v=>v+"%",applyBg);
+
+$$(".tmode").forEach(b=>b.onclick=()=>{
+  Sfx.ui();
+  CFG.touch=b.dataset.touch; CFG.touchSet=true; saveCfg();
+  applyTouchMode(); paintTouch();
+});
+function paintTouch(){
+  $$(".tmode").forEach(b=>b.classList.toggle("on",b.dataset.touch===CFG.touch));
+  const dpad=CFG.touch==="dpad", swipe=CFG.touch==="swipe";
+  $("#dpad-opts").hidden=!dpad;
+  $("#swipe-opts").hidden=!swipe;
+  $("#touch-hint").textContent=T(dpad?"set_dpad_s":swipe?"set_swipe_s":"set_off_s");
+}
+
+$("#s-padon").onclick=()=>{
+  CFG.padOn=!CFG.padOn; saveCfg(); Sfx.ui();
+  $("#s-padon").classList.toggle("on",CFG.padOn);
+};
+addEventListener("gamepadconnected",()=>{ if(UI.cur==="#v-set") paintPad(); });
+addEventListener("gamepaddisconnected",()=>{ if(UI.cur==="#v-set") paintPad(); });
+bindRange("#s-swmove","swMove","#l-swmove",v=>T("u_cellpct",{v}));
+bindRange("#s-swdrop","swDrop","#l-swdrop",v=>T("u_cellpct",{v}));
+bindRange("#s-swflick","swFlick","#l-swflick",
+  v=>T("u_flick",{v:(v/100).toFixed(2)+" px/ms", n:T(v<=80?"f_gentle":v<=150?"f_normal":"f_firm")}));
+$("#b-swreset").onclick=()=>{
+  Sfx.ui();
+  CFG.swMove=80; CFG.swDrop=70; CFG.swFlick=110;
+  saveCfg(); repaintSettings();
+};
+$("#b-keyreset").onclick=()=>{ Sfx.ui(); CFG.keys=fillBinds(null,KEYS_DEFAULT); saveCfg(); bindRows("#keylist","keys"); };
+$("#b-padreset").onclick=()=>{ Sfx.ui(); CFG.pads=fillBinds(null,PADS_DEFAULT); saveCfg(); bindRows("#padlist","pads"); };
+
+$$(".lang").forEach(b=>{
+  b.onclick=()=>{
+    if(CFG.lang===b.dataset.lang) return;
+    CFG.lang=b.dataset.lang; saveCfg(); Sfx.ui();
+    applyLang();
+  };
+});
+
+[["#s-snd","snd"],["#s-bob","bob"],["#s-ghost","ghost"],
+ ["#s-grid","grid"],["#s-swap","swap"]].forEach(([id,key])=>{
+  const el=$(id);
+  el.classList.toggle("on",!!CFG[key]);
+  el.onclick=()=>{
+    CFG[key]=!CFG[key];
+    el.classList.toggle("on",CFG[key]);
+    saveCfg(); Sfx.ui();
+    if(key==="swap"){ applyControlSide(); layout(); }
+  };
+});
+
+$("#s-fb").value=CFG.fbUrl;
+$("#s-fb").oninput=e=>{ CFG.fbUrl=e.target.value.trim(); saveCfg(); };
+
+$("#s-name").value=CFG.name;
+$("#s-name").oninput=e=>{
+  CFG.name=e.target.value.toUpperCase().replace(/[^A-Z0-9 _-]/g,"").slice(0,12)||"PLAYER";
+  e.target.value=CFG.name;
+  saveCfg();
+};
 
 /* 9 · LAYOUT — screen and pads solved together, published as CSS variables */
 /* Pure geometry: viewport, size multiplier and the two nudges in; screen,
