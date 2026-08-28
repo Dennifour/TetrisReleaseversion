@@ -186,6 +186,22 @@ body.swap #act-wrap{transform:translate(calc(var(--shift-x,0px) * -1),var(--shif
 }
 :root[data-ui-theme="light"] .veil{background:rgba(255,255,255,.96)}
 .veil.on{opacity:1;visibility:visible;pointer-events:auto;transition:opacity .26s ease}
+
+/* The in-game pause overlay is deliberately not a .veil: it sits above live
+   gameplay rather than replacing a screen, so it stays out of UI.show()'s
+   screen-navigation bookkeeping (PARENT map, .cur, afterScreen cleanup). */
+.pause-menu{
+  --edge:max(16px,5vw);--col:min(460px,100%);
+  position:fixed;inset:0;z-index:16;display:flex;justify-content:flex-start;
+  padding:calc(env(safe-area-inset-top) + 16px) var(--edge) 16px;
+  background:rgba(10,10,12,.94);
+  overflow:hidden auto;
+  opacity:0;visibility:hidden;pointer-events:none;
+  transition:opacity .16s ease,visibility 0s .16s;
+}
+:root[data-ui-theme="light"] .pause-menu{background:rgba(255,255,255,.96)}
+.pause-menu.on{opacity:1;visibility:visible;pointer-events:auto;transition:opacity .16s ease}
+.pause-menu.versus #p-restart{display:none}
 .card{
   width:var(--col);margin-block:auto;padding-right:12px;
   transform:translateX(-46px) scale(.99);
@@ -485,6 +501,16 @@ html[lang=ko] .fold summary h3{letter-spacing:.02em}
       <div class="abtn b gb" data-k="rotL">B</div>
       <div class="abtn a ga" data-k="rotR">A</div>
       <div class="abtn sm gp" data-k="pause" data-i18n="btn_pause"></div>
+    </div>
+  </div>
+</div>
+
+<div class="pause-menu" id="pause-menu">
+  <div class="card">
+    <div class="menu">
+      <button class="mi nav" id="p-resume" data-i18n="pause_resume"></button>
+      <button class="mi nav" id="p-restart" data-i18n="pause_restart"></button>
+      <button class="mi nav" id="p-quit" data-i18n="pause_quit"></button>
     </div>
   </div>
 </div>
@@ -1020,6 +1046,9 @@ const I18N = {
   ok_sendback:["Now send this reply code back. The match starts as soon as they paste it.","이제 이 답장 코드를 보내세요. 상대가 붙여넣으면 바로 시작됩니다."],
   on_none:["No open rooms. Make one and wait.","열린 방이 없습니다. 방을 만들고 기다려 보세요."],
   on_seats:["{n}/{max} in the room","{max}명 중 {n}명"],
+  pause_quit:["QUIT TO MENU","메뉴로 나가기"],
+  pause_restart:["RESTART","다시 시작"],
+  pause_resume:["RESUME","계속하기"],
   opponent:["OPPONENT","상대"],
   pad_none:["none connected","연결된 패드 없음"],
   ph_chat:["Write something…","메시지를 입력하세요…"],
@@ -3751,9 +3780,39 @@ const UI = {
 
   togglePause(){
     if(!G || G.over) return;
-    if(G.mode==="versus") return;   // a match's clock is the room's, not one player's to stop
-    if(G.paused){ G.paused=false; Input.reset(); return; }
-    G.paused=true; Input.reset();
+    if(this.pauseOpen) this.closePauseMenu();
+    else this.openPauseMenu();
+  },
+  openPauseMenu(){
+    if(!G || G.over || this.pauseOpen) return;
+    // A versus match's clock is the room's, not one player's to stop — the
+    // menu is local, the board underneath keeps ticking either way.
+    if(G.mode!=="versus") G.paused=true;
+    Input.reset();
+    this.pauseOpen=true;
+    $("#pause-menu").classList.toggle("versus",G.mode==="versus");
+    $("#pause-menu").classList.add("on");
+  },
+  closePauseMenu(){
+    if(!this.pauseOpen) return;
+    this.pauseOpen=false;
+    $("#pause-menu").classList.remove("on");
+    if(G && !G.over) G.paused=false;
+    Input.reset();
+  },
+  restartFromPause(){
+    if(!G) return;
+    const mode=G.mode;
+    this.pauseOpen=false;
+    $("#pause-menu").classList.remove("on");
+    startGame(mode);
+  },
+  quitToMenu(){
+    this.pauseOpen=false;
+    $("#pause-menu").classList.remove("on");
+    if(G && G.mode==="versus"){ this.leaveRoom(); return; }
+    this.show("#v-home");
+    afterScreen(()=>{ G=null; FOES=[]; render(null); document.body.classList.remove("playing"); });
   },
 
   /* records */
@@ -4096,6 +4155,11 @@ $("#b-ready").onclick=()=>{
 };
 $$(".rule").forEach(b=>b.onclick=()=>{ Sfx.ui(); UI.setRule(b.dataset.rule); });
 $("#b-leave").onclick=()=>{ Sfx.ui(); UI.leaveRoom(); };
+
+/* pause menu */
+$("#p-resume").onclick=()=>{ Sfx.ui(); UI.closePauseMenu(); };
+$("#p-restart").onclick=()=>{ Sfx.ui(); UI.restartFromPause(); };
+$("#p-quit").onclick=()=>{ Sfx.ui(); UI.quitToMenu(); };
 $("#b-chat-toggle").onclick=()=>{
   Sfx.ui();
   const bar=$("#chatbar");
