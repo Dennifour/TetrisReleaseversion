@@ -71,6 +71,19 @@ body{
 }
 body.playing #bg{opacity:var(--bg-bright,.45)}
 
+/* A faint wash of whichever nav item is hovered or focused, felt through
+   the menu's own dark overlay rather than painted on top of it — the veil
+   sits above this at z-index 10 and its own 92%-opaque background does the
+   dimming, so this only ever needs to be a bright, fully-saturated radial
+   gradient. Two layers so switching from one item's colour to another's
+   cross-fades instead of popping. */
+#glow-a,#glow-b{
+  position:fixed;inset:-10%;z-index:9;pointer-events:none;
+  opacity:0;transition:opacity .5s ease;
+  background:radial-gradient(ellipse 55% 48% at 20% 42%,var(--gc,transparent) 0%,transparent 70%);
+}
+#glow-a.show,#glow-b.show{opacity:1}
+
 /* The corner icons share one row, so each one's place comes from the layout
    rather than from arithmetic that has to re-derive its neighbour's width. */
 .topbtns{
@@ -260,11 +273,6 @@ body.swap #act-wrap{transform:translate(calc(var(--shift-x,0px) * -1),var(--shif
   line-height:1.28;
 }
 #o-title{font-size:clamp(26px,7vmin,42px)}
-/* The wordmark takes the title's place on the menu, so it keeps the title's
-   margin and nothing else: the drawing carries its own proportions. */
-.logo{margin-bottom:26px}
-.logo svg{display:block;width:min(330px,88%);height:auto;color:var(--fg)}
-@media (max-height:600px){ .logo svg{width:min(250px,70%)} }
 html[lang=ko] .brand{letter-spacing:.09em}
 html[lang=ko] .tag,html[lang=ko] h3,html[lang=ko] .netstat{letter-spacing:.04em}
 .tag{text-align:left;color:var(--fg-faint);font-size:12px;letter-spacing:.13em;margin:-14px 0 22px;text-transform:uppercase;line-height:1.5}
@@ -291,14 +299,24 @@ h3:first-of-type{margin-top:4px}
 }
 /* The slab sets its own display, so hiding one needs saying twice. */
 .mi[hidden]{display:none}
-/* Only a slab that takes you somewhere hangs off the left edge like a tab in
-   a book: it starts outside the page and its label lands on the column. That
-   overhang is what says the press leads out of this screen. */
+/* A nav item is just its label: no slab, no tab hanging off the edge. It
+   sizes to its own text, lands on the same left edge as the headings above
+   it, and wears the colour of wherever it leads. */
 .mi.nav{
-  margin-left:calc(-1 * var(--bleed));width:calc(100% + var(--bleed));
-  padding:18px 22px 18px calc(22px + var(--bleed));
+  background:none;
+  width:fit-content;max-width:100%;justify-self:start;
+  padding:14px 20px;
   font-size:clamp(15px,3.6vmin,18px);
+  color:var(--acc,var(--fg));
 }
+/* Each destination carries its own colour. */
+.mi.nav[data-go="play"]    {--acc:#6fa8ff}
+.mi.nav[data-go="settings"]{--acc:#9aa3ad}
+.mi.nav[data-go="solo"]    {--acc:#4fd1ff}
+.mi.nav[data-go="sprint"]  {--acc:#4fe0a8}
+.mi.nav[data-go="speed"]   {--acc:#ffb84d}
+.mi.nav[data-go="versus"]  {--acc:#ff5d7a}
+.mi.nav[data-go="records"] {--acc:#c48bff}
 /* The fill is a white sheet blended by difference, so whatever it sweeps over
    inverts with it. */
 .mi::after{
@@ -307,14 +325,22 @@ h3:first-of-type{margin-top:4px}
   transform:scaleX(0);transform-origin:left center;opacity:0;
   transition:opacity .30s ease, transform 0s linear .30s;
 }
-.mi .sub{display:block;font-size:13px;font-weight:400;color:var(--fg-faint);letter-spacing:.01em;text-transform:none;margin-top:5px;line-height:1.5}
+/* A nav item swaps the sweep for a pill traced around its label — always
+   white, whatever the item's own colour is. */
+.mi.nav::after{
+  content:"";position:absolute;inset:-4px -14px;border-radius:999px;
+  background:none;mix-blend-mode:normal;border:1.5px solid #fff;
+  transform:scale(.96);opacity:0;
+  transition:opacity .18s ease,transform .18s cubic-bezier(.2,.9,.25,1);
+}
+.mi.nav:focus-visible::after,.mi.nav.on::after,.mi.nav:active::after,.mi.nav.lit::after{
+  transform:none;opacity:1;
+}
+.mi .sub{display:none}
 .mi.ctr{text-align:center}
 .mi.lang{text-transform:none}
 .mi.ghost{color:var(--fg-dim);padding:13px 20px;font-size:13px}
-.mi.nav.ghost{padding:13px 22px 13px calc(22px + var(--bleed));font-size:clamp(12.5px,2.9vmin,14px)}
-/* The way back is a shorter tab than the ones that lead on, so a screen's
-   last slab reads as the edge of the list rather than another entry in it. */
-.mi.nav[data-back]{width:calc((100% + var(--bleed)) * .7)}
+.mi.nav.ghost{padding:12px 18px;font-size:clamp(12.5px,2.9vmin,14px)}
 .mi[disabled]{opacity:.35;pointer-events:none}
 /* A guest cannot pick the match, but still has to be able to read which one it is. */
 .mi.ctr[disabled].on{opacity:.9}
@@ -328,6 +354,7 @@ h3:first-of-type{margin-top:4px}
   .mi:hover{transform:translateX(9px)}
   .mi:hover::after{transform:scaleX(1);opacity:1;
     transition:transform .22s cubic-bezier(.12,.95,.3,1), opacity 0s}
+  .mi.nav:hover::after{transform:none;opacity:1}
 }
 
 
@@ -352,10 +379,9 @@ html[lang=ko] .rec .k{letter-spacing:.04em}
   .brand{margin-bottom:12px}
   .tag{margin-bottom:14px}
   .mi,.rec{padding:11px 20px}
-  .mi.nav{padding:11px 20px 11px calc(20px + var(--bleed))}
+  .mi.nav{padding:11px 18px}
   .mi.ghost{padding:9px 20px}
-  .mi.nav.ghost{padding:9px 20px 9px calc(20px + var(--bleed))}
-  .mi .sub{margin-top:2px;line-height:1.35}
+  .mi.nav.ghost{padding:9px 16px}
   h3{margin-top:20px}
   .sp,.seat{padding-top:11px;padding-bottom:11px}
 }
@@ -628,7 +654,7 @@ html[lang=ko] .fold summary h3{letter-spacing:.02em}
 @media (prefers-reduced-motion:reduce){
   .veil,.veil .card,.mi,.mi::after,
   .mi:focus-visible::after,.mi.on::after,.mi:active::after,.mi.lit::after,
-  .mi:hover::after{transition-duration:.01ms;transition-delay:0s}
+  .mi:hover::after,#glow-a,#glow-b{transition-duration:.01ms;transition-delay:0s}
   .veil.fwd .card,.veil.out .mi{transition-duration:.01ms;transition-delay:0s}
   .panel.on{animation-duration:.01ms}
   .tab::after{transition-duration:.01ms}
@@ -652,6 +678,8 @@ html[lang=ko] .fold summary h3{letter-spacing:.02em}
 </div>
 
 <div id="bg"></div>
+<div id="glow-a" aria-hidden="true"></div>
+<div id="glow-b" aria-hidden="true"></div>
 <div id="stage">
   <div id="screen"><canvas id="cv"></canvas></div>
 
@@ -679,7 +707,6 @@ html[lang=ko] .fold summary h3{letter-spacing:.02em}
 
 <div class="veil on" id="v-menu">
   <div class="card">
-    <h1 class="brand logo" id="logo" aria-label="TETRIS"></h1>
     <div class="menu">
       <button class="mi nav" data-go="play"><span data-i18n="m_play"></span><span class="sub" data-i18n="m_play_s"></span></button>
       <button class="mi nav" data-go="settings"><span data-i18n="m_settings"></span><span class="sub" data-i18n="m_settings_s"></span></button>
@@ -4087,6 +4114,24 @@ const PARENT = {
 /* Leaving one of these drops whatever handshake it was holding. */
 const NET_SCREENS = {"#v-online":1,"#v-host":1,"#v-join":1};
 
+/* Each destination's colour, echoed from its --acc in CSS, washed faintly
+   across the whole screen while its nav item is hovered or focused. Two
+   layers so leaving one colour for another cross-fades instead of popping. */
+const ACCENTS = {
+  play:"111,168,255", settings:"154,163,173", solo:"79,209,255",
+  sprint:"79,224,168", speed:"255,184,77", versus:"255,93,122", records:"196,139,255"
+};
+const GLOW=[$("#glow-a"),$("#glow-b")];
+let glowOn=0;
+function glow(rgb){
+  if(!rgb){ GLOW[0].classList.remove("show"); GLOW[1].classList.remove("show"); return; }
+  const next=1-glowOn;
+  GLOW[next].style.setProperty("--gc","rgb("+rgb+")");
+  GLOW[next].classList.add("show");
+  GLOW[glowOn].classList.remove("show");
+  glowOn=next;
+}
+
 const UI = {
   stack:[], rev:false,
   cur:"#v-menu",
@@ -4095,6 +4140,7 @@ const UI = {
      fading up through one still leaving is unreadable — so the arrival waits
      for the exit to finish. */
   show(id,inner){
+    glow(null);
     const from=this.cur;
     if(id && from && id!==from){
       const rev=this.rev;              // the exit consumes it; the arrival needs it too
@@ -4689,17 +4735,26 @@ document.addEventListener("pointerdown",e=>{
   el._lit=setTimeout(()=>el.classList.remove("lit"),500);
 },true);
 
-$$("[data-go]").forEach(b=>b.onclick=()=>{
-  Sfx.unlock(); Sfx.ui();
-  const go=b.dataset.go;
-  if(go==="solo"||go==="sprint"){ UI.closeAll(); afterScreen(()=>startGame(go)); }
-  else if(go==="versus"){ Net.reset(); Who.start(); UI.show("#v-lobby"); }
-  else if(go==="speed") UI.show("#v-speed");
-  else if(go==="records") UI.showRecords();
-  else if(go==="play") UI.show("#v-play");
-  else if(go==="server") UI.show("#v-server");
-  else if(go==="p2p"){ Net.reset(); UI.show("#v-p2p"); }
-  else if(go==="settings") UI.openSettings();
+$$("[data-go]").forEach(b=>{
+  b.onclick=()=>{
+    Sfx.unlock(); Sfx.ui();
+    const go=b.dataset.go;
+    if(go==="solo"||go==="sprint"){ UI.closeAll(); afterScreen(()=>startGame(go)); }
+    else if(go==="versus"){ Net.reset(); Who.start(); UI.show("#v-lobby"); }
+    else if(go==="speed") UI.show("#v-speed");
+    else if(go==="records") UI.showRecords();
+    else if(go==="play") UI.show("#v-play");
+    else if(go==="server") UI.show("#v-server");
+    else if(go==="p2p"){ Net.reset(); UI.show("#v-p2p"); }
+    else if(go==="settings") UI.openSettings();
+  };
+  const rgb=ACCENTS[b.dataset.go];
+  if(rgb){
+    b.addEventListener("mouseenter",()=>glow(rgb));
+    b.addEventListener("mouseleave",()=>{ if(document.activeElement!==b) glow(null); });
+    b.addEventListener("focus",()=>glow(rgb));
+    b.addEventListener("blur",()=>{ if(!b.matches(":hover")) glow(null); });
+  }
 });
 $$("[data-back]").forEach(b=>b.onclick=()=>{ Sfx.ui(); UI.back("#"+b.closest(".veil").id); });
 
@@ -4816,33 +4871,6 @@ applyTouchMode();
   layout();
 };
 function repaintSettings(){ rangePainters.forEach(p=>p()); }
-
-/* ---- the wordmark ----------------------------------------------------- */
-/* TETRIS drawn on the board's own grid: every letter is one stroke a cell
-   thick, run along cell centres and cut flat at the ends, set tight. The R's
-   leg is drawn past the baseline and cut off by the viewport, so it finishes
-   square on the line like every other stem. Solid
-   letterforms rather than a mosaic — the grid sets the proportions, it does
-   not tile them. Our own lettering, not the Tetris Company's mark. */
-const GLYPHS = {
-  T:"M0 .5H3M1.5 .5V5",
-  E:"M.5 0V5M.5 .5H3M.5 2.5H2.6M.5 4.5H3",
-  R:"M.5 0V5M.5 .5H2.5V2.5H.5M1.35 2.5 2.75 5.35",
-  I:"M0 .5H3M1.5 .5V4.5M0 4.5H3",
-  S:"M3 .5H.5V2.5H2.5V4.5H0"
-};
-const GLYPH_W=3, GLYPH_H=5, GLYPH_GAP=0.7;
-function paintLogo(){
-  const el=$("#logo");
-  if(!el) return;
-  const word=[..."TETRIS"];
-  const cols=word.length*GLYPH_W+(word.length-1)*GLYPH_GAP;
-  const paths=word.map((c,i)=>
-    '<path d="'+GLYPHS[c]+'" transform="translate('+(i*(GLYPH_W+GLYPH_GAP)).toFixed(2)+' 0)"/>').join("");
-  el.innerHTML='<svg viewBox="-.03 -.03 '+(cols+0.06).toFixed(2)+' '+(GLYPH_H+0.06)+'" aria-hidden="true" '+
-    'focusable="false" fill="none" stroke="currentColor" stroke-width="1">'+paths+'</svg>';
-}
-paintLogo();
 
 /* ---- settings: categories, bindings and the usage bar ---------------- */
 /* Which panel settings opens on, remembered for as long as the page lives. */
