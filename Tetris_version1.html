@@ -4515,9 +4515,15 @@ if(fsCan){
   };
   // Not {once:true}: a rejected/ignored request (the gesture didn't
   // qualify, a permission prompt was dismissed, etc.) shouldn't use up
-  // the only try — keep listening on every pointerdown until it actually
-  // lands in fullscreen.
+  // the only try — keep listening on every pointerdown/keydown until it
+  // actually lands in fullscreen. There's no way to skip this and enter
+  // on page load with zero interaction — browsers only honor
+  // requestFullscreen() called synchronously inside a real user gesture,
+  // specifically to stop a page from doing this without consent — so
+  // this is the earliest it can happen: the very first press of
+  // anything, pointer or key, anywhere on the page.
   document.addEventListener("pointerdown",()=>tryEnterFs());
+  document.addEventListener("keydown",()=>tryEnterFs());
   document.addEventListener("fullscreenchange",syncFs);
   document.addEventListener("webkitfullscreenchange",syncFs);
 }
