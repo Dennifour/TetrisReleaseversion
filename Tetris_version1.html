@@ -91,6 +91,7 @@ body.playing #bg{opacity:var(--bg-bright,.45)}
 .topbtn path{fill:none;stroke:currentColor;stroke-width:2.1;stroke-linecap:round;stroke-linejoin:round}
 .pausebtn{display:none}
 body.swipe.playing .pausebtn,body.notouch.playing .pausebtn{display:grid}
+#fsbtn[hidden]{display:none}
 
 body.land #stage{grid-template-columns:var(--pad) var(--screen-w) var(--pad);grid-template-areas:"dpad screen actions"}
 body.land.swap #stage{grid-template-areas:"actions screen dpad"}
@@ -513,6 +514,11 @@ html[lang=ko] .fold summary h3{letter-spacing:.02em}
   <button id="pausebtn" class="topbtn pausebtn" type="button" data-i18n-aria="btn_pause">
     <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M9.5 5v14M14.5 5v14"/></svg>
   </button>
+  <button id="fsbtn" class="topbtn" type="button" hidden data-i18n-aria="btn_full">
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="M9 3H5.5A2.5 2.5 0 0 0 3 5.5V9M15 3h3.5A2.5 2.5 0 0 1 21 5.5V9M9 21H5.5A2.5 2.5 0 0 1 3 18.5V15M15 21h3.5a2.5 2.5 0 0 0 2.5-2.5V15"/>
+    </svg>
+  </button>
 </div>
 
 <div id="bg"></div>
@@ -728,7 +734,6 @@ html[lang=ko] .fold summary h3{letter-spacing:.02em}
         <section class="panel" data-panel="video" role="tabpanel">
           <h3 data-i18n="set_pres"></h3>
           <div class="opts">
-            <div class="sp" id="full-row" hidden><span data-i18n="set_full"></span><div class="sw" id="s-full"></div></div>
             <div class="sp"><span data-i18n="set_ghost"></span><div class="sw on" id="s-ghost"></div></div>
             <div class="sp"><span data-i18n="set_grid"></span><div class="sw on" id="s-grid"></div></div>
             <div class="sp"><span data-i18n="set_bob"></span><div class="sw on" id="s-bob"></div></div>
@@ -882,11 +887,11 @@ const CFG = {
   padOn: store.get("padOn",true),
   speedDiff: store.get("speedDiff","normal"),   // easy | normal | hard
   lang:  store.get("lang", /^ko/i.test(navigator.language||"") ? "ko" : "en"),
-  name:  store.get("name","") || ("PLAYER"+rnd(900+100)),
-  fullscreen: store.get("fullscreen",false)
+  name:  store.get("name","") || ("PLAYER"+rnd(900+100))
 };
 store.del("shake");                 // read once into `bob` above, then done with
 store.del("uiTheme");               // light/dark/system toggle is gone; the app is dark-only now
+store.del("fullscreen");            // no longer saved — it's a plain button now, not a persisted preference
 ["round","fx"].forEach(k=>store.del(k));   // the corner switch and the drop trail are gone
 store.del("clearfx");               // the line-clear effects it picked between are gone
 store.del("skin");                  // folded into the theme it was one field of
@@ -991,6 +996,7 @@ const I18N = {
   b_sendto:["{n} TO {who}","{who}에게 {n}줄"],
   b_tspin:["T-SPIN","T스핀"],
   back:["BACK","뒤로"],
+  btn_full:["Fullscreen","전체화면"],
   btn_hold:["HOLD","홀드"],
   btn_pause:["PAUSE","정지"],
   c_audio:["AUDIO","소리"],
@@ -1132,7 +1138,6 @@ const I18N = {
   set_das:["DAS — delay before auto-shift","DAS — 자동 이동 시작 지연"],
   set_dpad:["D-PAD","D패드"],
   set_dpad_s:["On-screen d-pad and buttons below or beside the well.","화면에 D패드와 버튼이 표시됩니다."],
-  set_full:["Fullscreen","전체화면"],
   set_ghost:["Ghost piece","고스트 블록"],
   set_grid:["Board grid","보드 격자"],
   set_handling:["Handling","조작감"],
@@ -4089,7 +4094,7 @@ document.addEventListener("pointerdown",e=>{
 $$("[data-go]").forEach(b=>b.onclick=()=>{
   Sfx.unlock(); Sfx.ui();
   const go=b.dataset.go;
-  if(go==="solo"||go==="sprint"){ tryEnterFs(); UI.closeAll(); afterScreen(()=>startGame(go)); }
+  if(go==="solo"||go==="sprint"){ UI.closeAll(); afterScreen(()=>startGame(go)); }
   else if(go==="play") UI.show("#v-play");
   else if(go==="versus"){ Net.reset(); UI.show("#v-lobby"); }
   else if(go==="speed") UI.show("#v-speed");
@@ -4103,7 +4108,6 @@ $$("[data-back]").forEach(b=>b.onclick=()=>{ Sfx.ui(); UI.back("#"+b.closest(".v
 $$("[data-speed]").forEach(b=>b.onclick=()=>{
   Sfx.unlock(); Sfx.ui();
   CFG.speedDiff=b.dataset.speed; saveCfg();
-  tryEnterFs();
   UI.closeAll();
   afterScreen(()=>startGame("speed"));
 });
@@ -4478,52 +4482,22 @@ $("#chat-in").addEventListener("focus",()=>{
 $("#pausebtn").addEventListener("click",e=>{ e.preventDefault(); e.stopPropagation(); UI.togglePause(); });
 $("#pausebtn").addEventListener("pointerdown",e=>e.stopPropagation());
 
-/* fullscreen — hidden on iPhone Safari, which has no element fullscreen.
-   CFG.fullscreen is the saved preference; the live fullscreen element is
-   the truth once the page can act on it. requestFullscreen() only honors
-   a call made synchronously inside a real user gesture's own handler, so
-   a page load can't just call it — tryEnterFs() is called directly from
-   the solo/sprint/speed start buttons' own onclick (above, before their
-   startGame() runs on a delayed afterScreen(), which is too late to
-   count as the gesture) and from a catch-all first pointerdown for every
-   other path into the game (versus, or just clicking around first). */
+/* fullscreen — a plain corner button, not a saved preference: click it,
+   the page goes fullscreen and the button hides itself; exit (Escape, the
+   browser's own control) and it comes back so there's still a way in.
+   Hidden entirely on iPhone Safari, which has no element fullscreen. */
 const fsEl =()=>document.fullscreenElement||document.webkitFullscreenElement||null;
 const fsCan=!!(document.documentElement.requestFullscreen||document.documentElement.webkitRequestFullscreen);
 function enterFs(){ try{ (document.documentElement.requestFullscreen||document.documentElement.webkitRequestFullscreen).call(document.documentElement); }catch(_){} }
-function exitFs(){ try{ (document.exitFullscreen||document.webkitExitFullscreen).call(document); }catch(_){} }
-function tryEnterFs(){ if(fsCan && CFG.fullscreen && !fsEl()) enterFs(); }
 
 if(fsCan){
-  $("#full-row").hidden=false;
-  $("#s-full").classList.toggle("on",CFG.fullscreen);
-  $("#s-full").addEventListener("click",()=>{
-    Sfx.ui();
-    CFG.fullscreen=!fsEl();
-    saveCfg();
-    if(fsEl()) exitFs(); else enterFs();
-  });
-  /* Only the toggle's own click (above) writes CFG.fullscreen — this just
-     mirrors the live state onto the switch. Saving here too would mean any
-     exit (Escape, the browser's own control, even the tab just closing —
-     which fires this the same as a deliberate one) permanently cleared the
-     saved preference, so the "on" a user picked would silently never
-     survive to their next visit. */
+  $("#fsbtn").hidden=false;
+  $("#fsbtn").addEventListener("click",()=>{ Sfx.ui(); enterFs(); });
   const syncFs=()=>{
-    $("#s-full").classList.toggle("on",!!fsEl());
+    $("#fsbtn").hidden=!!fsEl();
     layout();
     setTimeout(layout,120);
   };
-  // Not {once:true}: a rejected/ignored request (the gesture didn't
-  // qualify, a permission prompt was dismissed, etc.) shouldn't use up
-  // the only try — keep listening on every pointerdown/keydown until it
-  // actually lands in fullscreen. There's no way to skip this and enter
-  // on page load with zero interaction — browsers only honor
-  // requestFullscreen() called synchronously inside a real user gesture,
-  // specifically to stop a page from doing this without consent — so
-  // this is the earliest it can happen: the very first press of
-  // anything, pointer or key, anywhere on the page.
-  document.addEventListener("pointerdown",()=>tryEnterFs());
-  document.addEventListener("keydown",()=>tryEnterFs());
   document.addEventListener("fullscreenchange",syncFs);
   document.addEventListener("webkitfullscreenchange",syncFs);
 }
