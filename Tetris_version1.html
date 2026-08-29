@@ -1984,12 +1984,12 @@ function block(x,y,s,type,alpha=1){
    piece on the other side are drawn, and the piece arrives as its own
    silhouette.
 
-   Shared by the ghost (a dim preview of where a piece will land) and the
-   active piece (see activeOutline() below) — the same "nothing at rest,
-   one bright outline on whatever's current" the rest of the UI draws its
-   own pill with (.mi::after: no border on an unselected item, a crisp one
-   on whatever's hovered, focused, or selected). The locked stack carries
-   no outline at all, same as the menu never borders an item at rest.
+   Used by the ghost (a dim preview of where a piece will land) — the same
+   "nothing at rest, one bright outline on whatever's current" the rest of
+   the UI draws its own pill with (.mi::after: no border on an unselected
+   item, a crisp one on whatever's hovered, focused, or selected). The
+   falling piece and the locked stack carry no outline at all, same as the
+   menu never borders an item at rest.
 
    Fixed regardless of the board's own THEME, and the one thing on the
    board a theme never dresses: given the piece's own ink it would compete
@@ -2022,12 +2022,6 @@ function pieceOutline(type,r,px,py,bx,by,cell,alpha,width){
 const GHOST_A = 0.40;
 function ghostPiece(type,r,px,py,bx,by,cell){
   pieceOutline(type,r,px,py,bx,by,cell,GHOST_A,Math.max(1,cell*0.075)*2);
-}
-/* The one piece actually being played gets the full-strength version of
-   that same outline — opaque, like .mi::after once something is current,
-   rather than the ghost's 40%. */
-function activeOutline(type,r,px,py,bx,by,cell){
-  pieceOutline(type,r,px,py,bx,by,cell,1,Math.max(1.25,cell*0.09)*2);
 }
 function text(str,x,y,size,color,align="left",weight=600,spacing=0){
   ctx.fillStyle=color; ctx.textAlign=align; ctx.textBaseline="alphabetic";
@@ -2234,7 +2228,6 @@ function drawWell(g){
     const lockP = g.grounded ? clamp(g.lockTimer/LOCK_MS,0,1) : 0;
     for(const [cx,cy] of g.cells(g.cur.x,g.cur.y,g.cur.r))
       if(cy>=BUFFER) block(bx+cx*cell,by+(cy-BUFFER)*cell,cell,g.cur.t,1-lockP*0.25);
-    activeOutline(g.cur.t,g.cur.r,g.cur.x,g.cur.y,bx,by,cell);
   }
 
   ctx.restore();
