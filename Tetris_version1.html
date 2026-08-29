@@ -360,6 +360,16 @@ input[type=range]{-webkit-appearance:none;appearance:none;height:1px;flex:0 0 44
 input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:50%;background:var(--fg);cursor:pointer;border:0}
 input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:var(--fg);cursor:pointer;border:0}
 
+.grain-swatches{display:flex;gap:10px}
+input[type=color]{
+  -webkit-appearance:none;appearance:none;
+  width:32px;height:32px;padding:0;border:1.5px solid var(--line-strong);border-radius:50%;
+  background:none;cursor:pointer;overflow:hidden;flex:0 0 auto;
+}
+input[type=color]::-webkit-color-swatch-wrapper{padding:0;border-radius:50%}
+input[type=color]::-webkit-color-swatch{border:0;border-radius:50%}
+input[type=color]::-moz-color-swatch{border:0;border-radius:50%}
+
 /* ---- rail + panel: settings and the server room list ------------------
    A bare-text list on its own, a list beside its own content once there's
    room for both. Below the breakpoint, opening an item swaps the list for
@@ -736,6 +746,21 @@ html[lang=ko] .fold summary h3{letter-spacing:.02em}
           <h3 data-i18n="set_bg"></h3>
           <div class="sp rng" id="bg-brightrow" hidden><span><span data-i18n="set_bg_bright"></span><small id="l-bg"></small></span><input type="range" id="s-bg" min="0" max="100" step="5"></div>
           <p class="hint" id="bg-hint"></p>
+
+          <h3 data-i18n="set_grain"></h3>
+          <div class="opts">
+            <div class="sp"><span data-i18n="set_grain_motion"></span><div class="sw on" id="s-grmotion"></div></div>
+            <div class="sp rng"><span><span data-i18n="set_grain_speed"></span><small id="l-grspeed"></small></span><input type="range" id="s-grspeed" min="25" max="200" step="5"></div>
+            <div class="sp rng"><span><span data-i18n="set_grain_bright"></span><small id="l-grbright"></small></span><input type="range" id="s-grbright" min="40" max="160" step="5"></div>
+            <div class="sp full">
+              <span data-i18n="set_grain_colors"></span>
+              <div class="grain-swatches">
+                <input type="color" id="s-grc1">
+                <input type="color" id="s-grc2">
+                <input type="color" id="s-grc3">
+              </div>
+            </div>
+          </div>
         </section>
 
         <section class="panel" data-panel="audio" role="tabpanel">
@@ -868,6 +893,12 @@ const CFG = {
   grid:  store.get("grid",false),       // the well's cell grid
   theme: store.get("theme","default"),
   bgBright: store.get("bgBright",45),   // % opacity the active theme's background shows at
+  grColor1: store.get("grColor1","#8a72ff"),   // the menu Grainient wash's 3 colors
+  grColor2: store.get("grColor2","#241c40"),
+  grColor3: store.get("grColor3","#050508"),
+  grMotion: store.get("grMotion",true),        // animate it at all, vs. one still frame
+  grSpeed:  store.get("grSpeed",100),          // % of its default pace
+  grBright: store.get("grBright",100),         // % brightness multiplier
   swap:  store.get("swap",false),
   btnScale: store.get("btnScale",1),
   boardScale: store.get("boardScale",0.7),   // the well+hold+next panel, as a fraction of what solve() would otherwise give it
@@ -1139,6 +1170,11 @@ const I18N = {
   set_dpad_s:["On-screen d-pad and buttons below or beside the well.","화면에 D패드와 버튼이 표시됩니다."],
   set_full:["Fullscreen","전체화면"],
   set_ghost:["Ghost piece","고스트 블록"],
+  set_grain:["Menu background","메뉴 배경"],
+  set_grain_bright:["Brightness","밝기"],
+  set_grain_colors:["Colors","색상"],
+  set_grain_motion:["Animate","애니메이션"],
+  set_grain_speed:["Speed","속도"],
   set_grid:["Board grid","보드 격자"],
   set_handling:["Handling","조작감"],
   set_id:["Identity","이름"],
@@ -3673,8 +3709,10 @@ const Net = {
 
 /* 8 · GRAINIENT BACKGROUND — animated WebGL wash behind the menu veils,
    ported from React Bits' Grainient (ogl/React) to plain WebGL2 since this
-   file has no build step or framework; the shader itself is unchanged. */
-const GRAINIENT_COLORS = ["#8a72ff","#241c40","#050508"];
+   file has no build step or framework; the shader itself is unchanged.
+   Colors, speed, and brightness are user-tunable (Settings → Video →
+   Menu background) and live in CFG.gr*; everything below is fixed shader
+   tuning the settings UI doesn't expose. */
 const GRAINIENT_CFG = {
   timeSpeed:0.14, colorBalance:0.1, warpStrength:1.1, warpFrequency:3.4,
   warpSpeed:0.7, warpAmplitude:55.0, blendSoftness:0.35,
@@ -3710,6 +3748,7 @@ uniform float uGrainAnimated;
 uniform float uContrast;
 uniform float uGamma;
 uniform float uSaturation;
+uniform float uBrightness;
 uniform vec2 uCenterOffset;
 uniform float uZoom;
 uniform vec3 uColor1;
@@ -3763,6 +3802,7 @@ void mainImage(out vec4 o, vec2 C){
   float luma=dot(col,vec3(0.2126,0.7152,0.0722));
   col=mix(vec3(luma),col,uSaturation);
   col=pow(max(col,0.0),vec3(1.0/max(uGamma,0.001)));
+  col*=uBrightness;
   col=clamp(col,0.0,1.0);
 
   o=vec4(col,1.0);
@@ -3777,7 +3817,7 @@ void main(){
     const m=/^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
     return m ? [parseInt(m[1],16)/255,parseInt(m[2],16)/255,parseInt(m[3],16)/255] : [1,1,1];
   };
-  let canvas,gl,program,u,vao,raf=0,t0=0,active=false,ready=false;
+  let canvas,gl,program,u,vao,raf=0,t0=0,lastT=0,active=false,ready=false,motion=CFG.grMotion;
   const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
   function compile(type,src){
@@ -3807,14 +3847,19 @@ void main(){
     u={};
     ["iResolution","iTime","uTimeSpeed","uColorBalance","uWarpStrength","uWarpFrequency",
      "uWarpSpeed","uWarpAmplitude","uBlendAngle","uBlendSoftness","uRotationAmount","uNoiseScale",
-     "uGrainAmount","uGrainScale","uGrainAnimated","uContrast","uGamma","uSaturation",
+     "uGrainAmount","uGrainScale","uGrainAnimated","uContrast","uGamma","uSaturation","uBrightness",
      "uCenterOffset","uZoom","uColor1","uColor2","uColor3"].forEach(n=>{ u[n]=gl.getUniformLocation(program,n); });
     gl.useProgram(program);
-    gl.uniform1f(u.uTimeSpeed,GRAINIENT_CFG.timeSpeed);
+    // uTimeSpeed/uWarpSpeed and uColor1-3/uBrightness are the user-tunable
+    // ones (Settings → Video → Menu background) — read live off CFG rather
+    // than the designer defaults below, so a saved preference survives a
+    // context loss/restore. Everything else is fixed shader tuning.
+    const speedMult=CFG.grSpeed/100;
+    gl.uniform1f(u.uTimeSpeed,GRAINIENT_CFG.timeSpeed*speedMult);
     gl.uniform1f(u.uColorBalance,GRAINIENT_CFG.colorBalance);
     gl.uniform1f(u.uWarpStrength,GRAINIENT_CFG.warpStrength);
     gl.uniform1f(u.uWarpFrequency,GRAINIENT_CFG.warpFrequency);
-    gl.uniform1f(u.uWarpSpeed,GRAINIENT_CFG.warpSpeed);
+    gl.uniform1f(u.uWarpSpeed,GRAINIENT_CFG.warpSpeed*speedMult);
     gl.uniform1f(u.uWarpAmplitude,GRAINIENT_CFG.warpAmplitude);
     gl.uniform1f(u.uBlendAngle,GRAINIENT_CFG.blendAngle);
     gl.uniform1f(u.uBlendSoftness,GRAINIENT_CFG.blendSoftness);
@@ -3826,9 +3871,10 @@ void main(){
     gl.uniform1f(u.uContrast,GRAINIENT_CFG.contrast);
     gl.uniform1f(u.uGamma,GRAINIENT_CFG.gamma);
     gl.uniform1f(u.uSaturation,GRAINIENT_CFG.saturation);
+    gl.uniform1f(u.uBrightness,CFG.grBright/100);
     gl.uniform2f(u.uCenterOffset,GRAINIENT_CFG.centerX,GRAINIENT_CFG.centerY);
     gl.uniform1f(u.uZoom,GRAINIENT_CFG.zoom);
-    const [c1,c2,c3]=GRAINIENT_COLORS.map(hexToRgb);
+    const [c1,c2,c3]=[CFG.grColor1,CFG.grColor2,CFG.grColor3].map(hexToRgb);
     gl.uniform3f(u.uColor1,c1[0],c1[1],c1[2]);
     gl.uniform3f(u.uColor2,c2[0],c2[1],c2[2]);
     gl.uniform3f(u.uColor3,c3[0],c3[1],c3[2]);
@@ -3842,6 +3888,7 @@ void main(){
     gl.uniform2f(u.iResolution,w,h);
   }
   function draw(t){
+    lastT=t;
     gl.uniform1f(u.iTime,t);
     gl.bindVertexArray(vao);
     gl.drawArrays(gl.TRIANGLES,0,3);
@@ -3851,15 +3898,18 @@ void main(){
     if(!active) return;
     if(!t0) t0=ts;
     draw((ts-t0)*0.001);
-    raf=requestAnimationFrame(frame);
+    if(motion) raf=requestAnimationFrame(frame);
   }
   function start(){
     if(!ready || raf || document.hidden) return;
     resize();
-    if(reduceMotion){ draw(0); return; }
+    if(reduceMotion || !motion){ draw(lastT); return; }
     raf=requestAnimationFrame(frame);
   }
   function stop(){ if(raf){ cancelAnimationFrame(raf); raf=0; } }
+  // Repaints the current (frozen) frame so a color/brightness change made
+  // from Settings shows up immediately even when motion is paused/off.
+  function repaint(){ if(ready && active && !raf) draw(lastT); }
   return {
     init(el){
       canvas=el;
@@ -3874,6 +3924,32 @@ void main(){
     setActive(on){
       active=on;
       if(on) start(); else stop();
+    },
+    setMotion(on){
+      motion=on;
+      if(on){ if(active) start(); }
+      else stop();
+    },
+    setSpeed(mult){
+      if(!ready) return;
+      gl.useProgram(program);
+      gl.uniform1f(u.uTimeSpeed,GRAINIENT_CFG.timeSpeed*mult);
+      gl.uniform1f(u.uWarpSpeed,GRAINIENT_CFG.warpSpeed*mult);
+    },
+    setBrightness(mult){
+      if(!ready) return;
+      gl.useProgram(program);
+      gl.uniform1f(u.uBrightness,mult);
+      repaint();
+    },
+    setColors(hexArr){
+      if(!ready) return;
+      gl.useProgram(program);
+      const [c1,c2,c3]=hexArr.map(hexToRgb);
+      gl.uniform3f(u.uColor1,c1[0],c1[1],c1[2]);
+      gl.uniform3f(u.uColor2,c2[0],c2[1],c2[2]);
+      gl.uniform3f(u.uColor3,c3[0],c3[1],c3[2]);
+      repaint();
     }
   };
 })();
@@ -4375,6 +4451,25 @@ bindRange("#s-das","das","#l-das",v=>T("u_ms",{v}));
 bindRange("#s-arr","arr","#l-arr",v=>v===0?T("u_instant"):T("u_ms",{v}));
 bindRange("#s-sdf","sdf","#l-sdf",v=>T("u_cps",{v}));
 bindRange("#s-vol","vol","#l-vol",v=>v+"%",()=>Sfx.setVol());
+
+/* menu Grainient background — Settings → Video → Menu background */
+bindRange("#s-grspeed","grSpeed","#l-grspeed",v=>v+"%",()=>GrainientBG.setSpeed(CFG.grSpeed/100));
+bindRange("#s-grbright","grBright","#l-grbright",v=>v+"%",()=>GrainientBG.setBrightness(CFG.grBright/100));
+$("#s-grmotion").classList.toggle("on",CFG.grMotion);
+$("#s-grmotion").onclick=()=>{
+  CFG.grMotion=!CFG.grMotion;
+  $("#s-grmotion").classList.toggle("on",CFG.grMotion);
+  saveCfg(); Sfx.ui();
+  GrainientBG.setMotion(CFG.grMotion);
+};
+[["#s-grc1","grColor1"],["#s-grc2","grColor2"],["#s-grc3","grColor3"]].forEach(([id,key])=>{
+  const el=$(id);
+  el.value=CFG[key];
+  el.oninput=()=>{
+    CFG[key]=el.value; saveCfg();
+    GrainientBG.setColors([CFG.grColor1,CFG.grColor2,CFG.grColor3]);
+  };
+});
 
 bindRange("#s-btn","btnScale","#l-btn",v=>{
   const {W,H}=viewportBox();
