@@ -508,10 +508,13 @@ html[lang=ko] .fold summary h3{letter-spacing:.02em}
 @media (min-width:760px){
   .dash-grid{
     grid-template-columns:1fr 1fr;grid-template-rows:auto auto;
-    grid-template-areas:"seats match" "chat .";
+    grid-template-areas:"seats match" "chat match";
   }
   .seats-panel{grid-area:seats}
-  .match-panel{grid-area:match}
+  /* Spans both rows so its border runs the same height as the seats+chat
+     column beside it, rather than stopping short and leaving the rest of
+     that column blank. */
+  .match-panel{grid-area:match;justify-content:center}
   .room-chat{grid-area:chat}
   .seat-grid{grid-template-columns:1fr 1fr}
 }
