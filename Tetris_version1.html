@@ -437,35 +437,38 @@ html[lang=ko] .fold summary h3{letter-spacing:.02em}
    (leave + occupancy), so the room reads like a status board instead of
    a form. This screen doesn't use the shared --col cap at all — the
    panels want the width. Below 760px the panels stack in document order
-   (players, match, chat); at 760px and up they arrange into a grid with
-   players spanning the full height of the side column. Seats are a
-   status display, not navigation, so they keep an at-rest border like
-   the lobby's .room-row, and so does every other panel here. */
+   (players, match, chat). At 760px and up, players and match sit as a
+   compact top row sized to their own content — a seat list tops out at
+   four rows and shouldn't claim a whole column's height just because
+   chat is tall — and chat takes the second row full-width, where the
+   growing room is actually useful. Seats are a status display, not
+   navigation, so they keep an at-rest border like the lobby's .room-row,
+   and so does every other panel here. */
 #v-room .card{width:100%;max-width:none;display:flex;flex-direction:column;gap:16px}
 .dash-head{display:flex;align-items:center;gap:16px 24px;flex-wrap:wrap}
 .dash-head .hint{margin:0;flex:1 1 220px}
 .dash-grid{display:grid;gap:16px;grid-template-columns:1fr;min-height:0}
 .dash-panel{
-  display:flex;flex-direction:column;gap:14px;min-width:0;
+  display:flex;flex-direction:column;gap:10px;min-width:0;
   border:1px solid var(--line);border-radius:var(--radius-sm,10px);
-  background:var(--surface);padding:18px;
+  background:var(--surface);padding:14px;
 }
 .panel-label{
-  flex:0 0 auto;font-size:12px;font-weight:700;letter-spacing:.1em;
+  flex:0 0 auto;font-size:11px;font-weight:700;letter-spacing:.1em;
   text-transform:uppercase;color:var(--fg-faint);
 }
-.seat-grid{display:grid;gap:10px;grid-template-columns:1fr}
+.seat-grid{display:grid;gap:6px;grid-template-columns:1fr}
 .seat-row{
-  display:flex;align-items:center;justify-content:space-between;gap:16px;
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
   border:1px solid var(--line);border-radius:var(--radius-sm,10px);
-  padding:13px 18px;background:var(--bg);
+  padding:8px 12px;background:var(--bg);
 }
 .seat-row.mine{border-color:var(--line-strong)}
 .seat-row.ready{border-color:#4fe0a8}
 .seat-row.spectating{opacity:.6}
-.seat-row .w{font-size:19px;font-weight:700;font-variant-numeric:tabular-nums}
-.seat-row .w small{margin-left:6px;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--fg-faint);font-weight:600}
-.seat-row .nm{font-size:13.5px;font-weight:600;color:var(--fg-dim)}
+.seat-row .w{font-size:14px;font-weight:700;font-variant-numeric:tabular-nums}
+.seat-row .w small{margin-left:5px;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--fg-faint);font-weight:600}
+.seat-row .nm{font-size:12.5px;font-weight:600;color:var(--fg-dim)}
 .seat-row.ready .nm{color:#4fe0a8}
 .match-panel .row{width:100%}
 .ready-row{width:100%}
@@ -481,7 +484,7 @@ html[lang=ko] .fold summary h3{letter-spacing:.02em}
    padding the other panels get in favour of its own head/log/compose
    sections meeting the card edge flush. */
 .room-chat{padding:0;overflow:hidden;min-height:260px}
-.room-chat .panel-label{padding:14px 18px;border-bottom:1px solid var(--line)}
+.room-chat .panel-label{padding:12px 16px;border-bottom:1px solid var(--line)}
 .chat-log{flex:1 1 auto;min-height:0;overflow-y:auto;padding:14px 18px;display:flex;flex-direction:column;gap:10px}
 .chat-log .empty{margin:auto;color:var(--fg-faint);font-size:13px}
 .chat-log .msg{max-width:80%}
@@ -503,10 +506,10 @@ html[lang=ko] .fold summary h3{letter-spacing:.02em}
   #v-room .card{height:calc(100vh - env(safe-area-inset-top) - 32px)}
   .dash-grid{
     flex:1 1 auto;min-height:0;
-    grid-template-columns:1.3fr 1fr;grid-template-rows:auto 1fr;
-    grid-template-areas:"seats match" "seats chat";
+    grid-template-columns:1fr 1fr;grid-template-rows:auto 1fr;
+    grid-template-areas:"seats match" "chat chat";
   }
-  .seats-panel{grid-area:seats;overflow-y:auto}
+  .seats-panel{grid-area:seats}
   .match-panel{grid-area:match}
   .room-chat{grid-area:chat;min-height:0}
   .seat-grid{grid-template-columns:1fr 1fr}
