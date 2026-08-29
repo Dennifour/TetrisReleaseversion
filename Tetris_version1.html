@@ -2759,9 +2759,9 @@ const WINS_P2P ={me:0,peer:0};
 function mirrorFoes(others){
   FOES=others.map(p=>{
     const was=FOES.find(f=>f.pid===p.pid);
-    const f=was||{pid:p.pid,board:null,sent:0,score:0};
+    const f=was||{pid:p.pid,board:null,score:0};
     f.name=p.n; f.dead=p.d; f.wins=p.w;
-    if(p.b){ f.board=Grid.dec(p.b.d||""); f.sent=p.b.s|0; f.score=p.b.p|0; if(p.b.o) f.dead=true; }
+    if(p.b){ f.board=Grid.dec(p.b.d||""); f.score=p.b.p|0; if(p.b.o) f.dead=true; }
     return f;
   });
 }
@@ -2942,7 +2942,7 @@ function startGame(mode){
   COUNT=3; countEnd=now()+3000; startHoldEnd=0;
   if(mode==="versus"){
     Room.starting=0;                     // the call has become a well; the room may call the next one
-    FOES.forEach(f=>{ f.board=null; f.sent=0; f.score=0; f.dead=false; f.ms=0; });
+    FOES.forEach(f=>{ f.board=null; f.score=0; f.dead=false; f.ms=0; });
   }
   else FOES=[];
   FX.banners.length=0; FX.clearBanners.length=0; FX.bob=FX.bobV=0;
@@ -3323,15 +3323,28 @@ const Grid = {
    the recipient the only reader and free to clear it. Chat is appended and
    left alone; the host trims it.
 
-   One GET a tick fetches the whole room — four boards run-length encoded and
-   a little chat — rather than one per player, which keeps the request count
-   flat as the room fills.                                                  */
-const ROOM_MS=220, ROOM_HB=2500, ROOM_GONE=11000, CHAT_KEEP=40, MAX_SEATS=4;
+   One GET a tick fetches the whole room — four boards, run-length encoded —
+   rather than one per player, which keeps the request count flat as the room
+   fills. What that GET brings back is kept to what actually moves: the log
+   lives outside the room node and is read only when the room says it grew
+   (see chatPath), a board leaves out every field still at its default, and
+   the tick itself slows to ROOM_IDLE_MS between matches. A room is read
+   several times a second for minutes at a time, so anything constant riding
+   along in it is paid for again on every one of those reads.              */
+/* ROOM_MS is the tick a live round needs; ROOM_IDLE_MS is what a room sitting
+   between them is read at, since nothing there moves unless somebody presses
+   something. ROOM_RELIST is how often the host refreshes its lobby entry — far
+   short of ROOM_STALE, and far longer than a heartbeat. */
+const ROOM_MS=220, ROOM_IDLE_MS=900, ROOM_HB=2500, ROOM_RELIST=30000,
+      ROOM_GONE=11000, CHAT_KEEP=40, MAX_SEATS=4;
 let PID="";                       // who this tab is, for as long as it is open
 
 const Room = {
   id:null, on:false, host:false, timer:null, hb:null,
   players:[], chat:[], gseq:0, lastGo:0, seed:0,
+  cq:"",                            // the last chat key this client has read
+  listedC:0, listedAt:0,            // what the lobby entry last said, and when
+  beatAt:0,                         // when this seat's clock was last written, by anything
   /* Who the round started with, as pid → the join stamp they held at the time.
      Taken locally when the start is seen rather than published, so it needs no
      agreement and no clock two machines have to share. It is a snapshot: a
@@ -3346,7 +3359,15 @@ const Room = {
   starting:0,                     // a start called but not yet a well, on this clock
   lastPoll:0,                     // when a read last went out, on this clock
 
+  /* Chat is kept out of the room node rather than under it. The room is read
+     whole, several times a second, for boards and garbage — and a log of forty
+     lines that had not changed since the match began was re-downloaded on
+     every one of those reads, dwarfing the wells it was riding alongside. It
+     lives beside the room instead, and the room carries only the key of the
+     last thing said: a few bytes a tick that say whether there is anything new
+     to go and read. */
   path(){ return "/rooms/"+this.id; },
+  chatPath(){ return "/chat/"+this.id; },
   mine(){ return this.path()+"/p/"+PID; },
   me(){ return this.players.find(p=>p.pid===PID)||null; },
   others(){ return this.players.filter(p=>p.pid!==PID); },
@@ -3390,6 +3411,7 @@ const Room = {
     this.id=id; this.host=host; this.on=true;
     this.players=[]; this.chat=[]; this.gseq=0; this.lastGo=lastGo||0;
     this.roster=new Map(); this.dropped=new Set(); this.starting=0; this.lastPoll=now();
+    this.cq=""; this.listedC=0; this.listedAt=0; this.beatAt=0;
     Who.inRoom(id);
     this.beat();
     this.hb=setInterval(()=>this.beat(),ROOM_HB);
@@ -3403,10 +3425,10 @@ const Room = {
     clearTimeout(this.timer); clearInterval(this.hb);
     this.timer=this.hb=null; this.id=null;
     this.players=[]; this.chat=[]; this.roster=new Map(); this.dropped=new Set();
-    this.starting=0; this.lastPoll=0; ASKED.clear();
+    this.starting=0; this.lastPoll=0; this.cq=""; this.beatAt=0; ASKED.clear();
     if(id && FB.on()){
-      // the host owns the room and takes it down with it
-      if(host){ FB.del("/lobby/"+id); FB.del("/rooms/"+id); }
+      // the host owns the room and takes it down with it, log and all
+      if(host){ FB.del("/lobby/"+id); FB.del("/rooms/"+id); FB.del("/chat/"+id); }
       /* Leaving a room that is already gone must not write anything back:
          PUTting the listing's timestamp recreated /lobby/<id> as a nameless,
          seatless entry that then advertised an unjoinable room for the two
@@ -3418,15 +3440,43 @@ const Room = {
     Who.inRoom(null);
   },
 
+  /* How fast the room is read. A live round needs every tick — garbage rides
+     the poll, and so does the moment the last well stops — and so does a round
+     this client is still waiting on a verdict for, since resolveRound() judges
+     "still playing" against what the last read brought back. A room between
+     matches changes only when somebody presses something, so it is read at a
+     walk, quickening again the moment anyone is ready: a start is a poll away
+     then, and the countdown that follows has to line up across four clients. */
+  rate(){
+    if(this.starting) return ROOM_MS;
+    if(G && G.mode==="versus" && !G.resolved && !G.stranded) return ROOM_MS;
+    return this.players.some(p=>p.rdy) ? ROOM_MS : ROOM_IDLE_MS;
+  },
+
   beat(){
     if(!this.on) return;
-    FB.put(this.mine()+"/t",Date.now()).catch(()=>{});
+    /* A board write refreshes the seat's clock along with it, so during a
+       round the heartbeat has nothing left to say. */
+    if(Date.now()-this.beatAt>=ROOM_HB-100){
+      this.beatAt=Date.now();
+      FB.put(this.mine()+"/t",this.beatAt).catch(()=>{});
+    }
     /* The host also keeps the room's own listing alive and current: without
        this a room in use would go stale out of the list after two minutes,
-       and would advertise the one seat it was created with forever. */
-    if(this.host) FB.patch("/lobby/"+this.id,{n:CFG.name, t:Date.now(), c:this.players.length||1}).catch(()=>{});
+       and would advertise the one seat it was created with forever. It only
+       has to beat ROOM_STALE, though — rewriting the same three fields
+       twenty times a minute kept nothing fresher than occupancy already is. */
+    if(!this.host) return;
+    const c=this.players.length||1;
+    if(c===this.listedC && Date.now()-this.listedAt<ROOM_RELIST) return;
+    this.listedC=c; this.listedAt=Date.now();
+    FB.patch("/lobby/"+this.id,{n:CFG.name, t:Date.now(), c}).catch(()=>{});
   },
   set(k,v){ if(this.on) FB.put(this.mine()+"/"+k,v).catch(()=>{}); },
+  /* The well and the seat's clock in one write: the board goes out several
+     times a second anyway, so carrying the heartbeat with it costs a few bytes
+     and saves a whole request every ROOM_HB. */
+  board(b){ if(!this.on) return; this.beatAt=Date.now(); FB.patch(this.mine(),{b, t:this.beatAt}).catch(()=>{}); },
   /* Several keys in one merge. The death and the run it ended have to land
      together — a reader that saw d without ms would take the missing duration
      for a short one and hand the round to the wrong player — and the writes a
@@ -3451,11 +3501,46 @@ const Room = {
     if(!t.trim()) return;
     const key=Date.now()+"-"+PID;
     // Echoed locally rather than waiting on a poll to read the write back —
-    // poll() folds this in (matched by key) once the server confirms it, and
-    // drops it if it's still unconfirmed after a room's worth of history.
+    // readChat() folds this in (matched by key) once the server confirms it.
     this.chat=this.chat.concat([{key,n:CFG.name,m:t}]).slice(-CHAT_KEEP);
     UI.renderChat();
-    FB.put(this.path()+"/c/"+key,{n:CFG.name,m:t}).catch(()=>{});
+    FB.put(this.chatPath()+"/"+key,{n:CFG.name,m:t}).catch(()=>{});
+    // the flag the others poll: changed means there is something new to fetch
+    FB.patch(this.path(),{cq:key}).catch(()=>{});
+  },
+
+  /* Fetched only when the room says the log moved, so a quiet room costs
+     nothing beyond the key it compares. */
+  async readChat(){
+    if(!this.on) return;
+    const id=this.id;
+    try{
+      const c=await FB.get("/chat/"+id);
+      if(!this.on||this.id!==id) return;
+      this.foldChat(c);
+      UI.renderChat();
+    }catch(e){ this.cq=""; }      // try again on the next poll rather than losing the line
+  },
+  /* Read as what is there rather than as what is new since a high-water mark:
+     the keys are four different wall clocks, and a player whose machine ran a
+     minute behind the room would have written every line under one already
+     passed and never been heard from again. */
+  foldChat(c){
+    if(!c){ this.chat=this.chat.filter(x=>x.key); return; }
+    const keys=Object.keys(c).sort((a,b)=>parseInt(a,10)-parseInt(b,10));
+    const confirmed=keys.slice(-CHAT_KEEP).map(k=>({
+      key:k, n:String((c[k]||{}).n||"").slice(0,12), m:String((c[k]||{}).m||"").slice(0,120)
+    }));
+    // A message said locally via say() is in this.chat the instant it's sent —
+    // the write to confirm it just hasn't round-tripped yet. Keep it in place
+    // rather than dropping it back out until it shows up here under its own key.
+    const seen=new Set(keys);
+    const stillMine=this.chat.filter(x=>x.key && !seen.has(x.key));
+    this.chat=confirmed.concat(stillMine)
+      .sort((a,b)=>parseInt(a.key,10)-parseInt(b.key,10))
+      .slice(-CHAT_KEEP);
+    if(this.host && keys.length>CHAT_KEEP)
+      keys.slice(0,keys.length-CHAT_KEEP).forEach(k=>FB.del(this.chatPath()+"/"+k));
   },
 
   /* The host is the one that calls the start, so four clients cannot each
@@ -3535,27 +3620,12 @@ const Room = {
         }
       }
 
-      /* Read as what is there rather than as what is new since a high-water
-         mark: the keys are four different wall clocks, and a player whose
-         machine ran a minute behind the room would have written every line
-         under one already passed and never been heard from again. */
-      if(v.c){
-        const keys=Object.keys(v.c).sort((a,b)=>parseInt(a,10)-parseInt(b,10));
-        const confirmed=keys.slice(-CHAT_KEEP).map(k=>({
-          key:k, n:String((v.c[k]||{}).n||"").slice(0,12), m:String((v.c[k]||{}).m||"").slice(0,120)
-        }));
-        // A message said locally via say() is in this.chat the instant it's
-        // sent — the write to confirm it just hasn't round-tripped through a
-        // poll yet. Keep it in place rather than dropping it back out until
-        // it shows up here under its own key.
-        const confirmedKeys=new Set(keys);
-        const stillMine=this.chat.filter(c=>c.key && !confirmedKeys.has(c.key));
-        this.chat=confirmed.concat(stillMine)
-          .sort((a,b)=>parseInt(a.key,10)-parseInt(b.key,10))
-          .slice(-CHAT_KEEP);
-        if(this.host && keys.length>CHAT_KEEP)
-          keys.slice(0,keys.length-CHAT_KEEP).forEach(k=>FB.del(this.path()+"/c/"+k));
-      }else this.chat=this.chat.filter(c=>c.key);
+      /* The log itself is a separate read, and only when this says it moved.
+         An empty marker on a room that has never been spoken in leaves the
+         local echo alone rather than costing a fetch to learn there is
+         nothing there. */
+      const cq=String(v.cq||"");
+      if(cq!==this.cq){ this.cq=cq; if(cq) this.readChat(); }
 
       if(v.go && v.go.at && v.go.at!==this.lastGo){
         this.lastGo=v.go.at;
@@ -3590,7 +3660,7 @@ const Room = {
       // the round is resolved from the loop, which runs whether or not a poll lands
       if(this.host) this.maybeStart();
     }catch(e){ /* one dropped poll is not a lost room */ }
-    if(this.on) this.timer=setTimeout(()=>this.poll(),ROOM_MS);
+    if(this.on) this.timer=setTimeout(()=>this.poll(),this.rate());
   },
 
   maybeStart(){
@@ -3759,15 +3829,26 @@ const Net = {
        when it has not moved since the last frame — the peer already holds it,
        and the key it would be written to is last-value anyway. */
     if(obj.t==="b"){
-      obj={t:"b",d:Grid.enc(obj.d),s:obj.s,p:obj.p,o:obj.o};
-      const key=JSON.stringify(obj);
+      /* Only what is not a default travels. A well every reader already takes
+         to be at zero says so by leaving the key out, and the score is only
+         worth anything under the rule that plays for it — under the other one
+         it was ten bytes a tick per player nothing ever read. */
+      const b={d:Grid.enc(obj.d)};
+      if(G && G.clock && obj.p) b.p=obj.p|0;
+      if(obj.o) b.o=1;
+      const key=JSON.stringify(b);
       if(key===this.lastB) return;
       this.lastB=key;
+      /* In a room every player publishes its own state and reads the rest, so
+         the board is the whole of what goes out — the room object owns the
+         branch, and garbage goes out addressed rather than broadcast. The type
+         tag stays behind with it: it is only there to tell one DataChannel
+         message from the next, and under a key already called "b" it says
+         nothing. */
+      if(this.mode==="room"){ Room.board(b); return; }
+      obj=Object.assign({t:"b"},b);
     }
-    /* In a room every player publishes its own state and reads the rest, so
-       there is nothing to send but the board — the room object owns the
-       branch, and garbage goes out addressed rather than broadcast. */
-    if(this.mode==="room"){ if(obj.t==="b") Room.set("b",obj); return; }
+    if(this.mode==="room") return;   // nothing else in a room is sent, only published
     try{ this.dc.send(JSON.stringify(obj)); }catch(e){}
   },
 
@@ -3777,12 +3858,12 @@ const Net = {
         this.peerName=String(m.name||T("opponent")).slice(0,12);
         if(this.role==="guest") NET_RULE = m.r==="score" ? "score" : "attack";
         if(FOES[0]) FOES[0].name=this.peerName;
-        else FOES=[{pid:"peer",name:this.peerName,board:null,sent:0,dead:false,wins:0}];
+        else FOES=[{pid:"peer",name:this.peerName,board:null,dead:false,wins:0}];
         UI.peerJoined();
         break;
       case "b":
-        if(!FOES[0]) FOES=[{pid:"peer",name:this.peerName||T("opponent"),board:null,sent:0,dead:false,wins:0}];
-        FOES[0].board=Grid.dec(m.d); FOES[0].sent=m.s|0; FOES[0].score=m.p|0; FOES[0].dead=!!m.o;
+        if(!FOES[0]) FOES=[{pid:"peer",name:this.peerName||T("opponent"),board:null,dead:false,wins:0}];
+        FOES[0].board=Grid.dec(m.d); FOES[0].score=m.p|0; FOES[0].dead=!!m.o;
         break;
       case "a":
         if(G && !G.over && G.mode==="versus"){
@@ -3858,7 +3939,7 @@ const Net = {
     const now=Date.now();
     for(const id in (idx||{})){
       const r=idx[id]||{};
-      if(now-(r.t||0)>ROOM_STALE) { FB.del("/lobby/"+id); FB.del("/rooms/"+id); continue; }
+      if(now-(r.t||0)>ROOM_STALE) { FB.del("/lobby/"+id); FB.del("/rooms/"+id); FB.del("/chat/"+id); continue; }
       out.push({id, name:String(r.n||"").slice(0,12), count:r.c|0});
     }
     return out;
