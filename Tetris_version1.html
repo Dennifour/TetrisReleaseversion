@@ -209,6 +209,21 @@ body.swap #act-wrap{transform:translate(calc(var(--shift-x,0px) * -1),var(--shif
 .pause-menu.on{opacity:1;visibility:visible;pointer-events:auto;transition:opacity .16s ease}
 .pause-menu.versus #p-restart{display:none}
 .card{width:var(--col);margin-block:auto;padding-right:12px}
+/* Settings sits directly on the user's own (now-customizable) Grainient
+   wash, and --fg-dim/--fg-faint text plus the translucent hairlines were
+   only ever tuned to read against the dark default — against a bright or
+   pale wash they wash out no matter how the shadow is tuned. Rather than
+   chase every possible background color, the card itself gets a solid
+   panel behind it (unlike the deleted #menu-dim, this is static content
+   of the card that already fades with its veil, not a separately toggled
+   layer with a gap to flicker through), so the text underneath is always
+   read against the same near-black surface it was designed for. */
+#v-set .card{
+  background:rgba(8,8,10,.86);
+  -webkit-backdrop-filter:blur(22px);backdrop-filter:blur(22px);
+  border:1px solid var(--line);border-radius:var(--radius-sm,16px);
+  padding:26px 24px;
+}
 
 .brand{
   font-weight:700;letter-spacing:-.01em;text-align:left;color:var(--fg);
