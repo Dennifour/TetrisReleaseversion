@@ -1506,6 +1506,10 @@ class Game {
     this.garbageHole=rnd(COLS);
     this.over=false; this.won=false; this.paused=false; this.spectating=false;
     this.stranded=false;               // the room went away mid-match; no result to read
+    /* A versus well that has stopped but whose round has not been called yet:
+       the card waits on resolveRound() rather than being shown the instant the
+       stack tops out, since who won may still be a poll away. */
+    this.resolved=false; this.pending=false; this.pendingAt=0;
     this.startedAt=now(); this.endedAt=0;
     this.pieceCount=0;
     this.dropTimer=0; this.lockTimer=0; this.lockResets=0; this.grounded=false;
@@ -1752,6 +1756,16 @@ class Game {
   /* end states */
   die(){ if(this.over) return; this.over=true; this.endedAt=now(); this.events.push({e:"dead"}); Sfx.ko(); }
   win(){ if(this.over) return; this.over=true; this.won=true; this.endedAt=now(); this.events.push({e:"win"}); Sfx.win(); }
+  /* How long this well ran, start to finish, on the one machine that ran it.
+     Both ends of it are read off the same clock, so it is a duration and not a
+     time: it can be compared with another player's without the two machines
+     having to agree on what time it is. startedAt is held at "now" all through
+     the countdown (see loop()), so this is play, not the wait before it. */
+  lasted(){ return Math.max(0, Math.round((this.endedAt||now())-this.startedAt)); }
+  /* A win worked out after this well had already stopped — the other player
+     turned out to have stopped first. There is no over or endedAt left to set
+     and no "win" event to raise, only the verdict to record. */
+  outlasted(){ if(this.won) return; this.won=true; Sfx.win(); }
 
   /* per-frame tick */
   tick(dt, input){
@@ -2759,16 +2773,94 @@ function mirrorFoes(others){
    Counted against the round's own roster, not against who happens to be in the
    room: someone who joined between rounds is not a survivor keeping the match
    alive, and someone who quit mid-round does not take the win away from the
-   player who outlasted them. */
-function checkLastStanding(){
-  // no garbage crosses under the score rule, so nobody is ever last standing
-  if(!Room.on||!G||G.over||G.mode!=="versus"||!G.attacks) return;
-  if(Room.roster.size<2) return;      // a round only this client answered is not a win
-  const alive=Room.alive();
-  if(alive.length===1 && alive[0].pid===PID){
-    Room.set("w",(Room.me()||{w:0}).w+1);
-    G.win();
+   player who outlasted them.
+
+   Two wells that stop within the same poll window leave nobody standing to
+   notice it. Each player is already over by the time the other's death is read
+   back, so the survivor test never fires again on either machine and a round
+   that plainly had a winner is recorded as two losses. What settles it is what
+   each well publishes about its own run: how long it lasted, measured start to
+   finish on the one machine that ran it. Those are durations, not times, so
+   comparing them asks nothing of two machines' clocks — and every client sorts
+   the same published numbers, so all of them name the same winner without
+   anyone having to be told.
+
+   The card waits on this rather than going up the instant the stack tops out:
+   the wait is one poll in the ordinary case, and showing the wrong result and
+   correcting it half a second later is worse than a beat of silence.
+
+   A win is only ever awarded on complete information. If a duration is still
+   missing when the wait runs out, the round is dropped as a loss rather than
+   guessed at — two clients guessing differently would each publish a win. */
+const TIE_SETTLE=700, TIE_CAP=2000;
+function resolveRound(){
+  if(!G||G.mode!=="versus"||!G.attacks||G.resolved||G.spectating||G.stranded) return;
+  const room = Net.mode==="room" && Room.on;
+
+  // still playing: the ordinary win, taken while last standing
+  if(!G.over){
+    if(!room || Room.roster.size<2) return;   // a round only this client answered is not a win
+    const alive=Room.alive();
+    if(alive.length===1 && alive[0].pid===PID){
+      G.resolved=true;
+      Room.set("w",(Room.me()||{w:0}).w+1);
+      G.win();
+    }
+    return;
   }
+
+  if(!G.pending) return;              // won outright, or a run that shows its card at once
+  const since=now()-G.pendingAt;
+  const lose=()=>{ G.resolved=true; G.pending=false; UI.gameOver(false); };
+  const take=()=>{
+    G.resolved=true; G.pending=false;
+    if(room) Room.set("w",(Room.me()||{w:0}).w+1);
+    G.outlasted();
+    UI.gameOver(true);
+  };
+
+  /* Who else ran, and for how long. A player still going has no duration to
+     show and is already outliving this well; one that has stopped publishes
+     its death and its duration together (Room.mark, and the P2P "d" carries
+     both), so a death without a duration is a write still on its way rather
+     than a run of no length.
+
+     This client's own death is taken as fact rather than read back — the write
+     announcing it is a round trip away, and nothing here needs the server to
+     confirm what this machine just watched happen. */
+  const field = room
+    ? Room.players.filter(p=>p.pid!==PID && Room.inRound(p)).map(p=>({pid:p.pid, done:p.d, ms:p.ms|0}))
+    : (FOES[0] ? [{pid:"peer", done:!!FOES[0].dead, ms:FOES[0].ms|0}] : []);
+
+  // everyone accounted for: the round can be called now, whatever the clock says
+  if(field.length && field.every(p=>p.done && p.ms>0)){
+    const mine=G.lasted();
+    let iWin;
+    if(room){
+      // longest run first; an exact tie to the lower pid, which every client reads the same way
+      const all=field.concat([{pid:PID, ms:mine}]).sort((a,b)=> (b.ms-a.ms) || (a.pid<b.pid?-1:1));
+      iWin = all[0].pid===PID;
+    }else{
+      /* P2P has no shared names to break an exact tie with — each end calls the
+         other "peer" — so it falls to the roles the link was set up under, which
+         the two ends already disagree about in the same direction. */
+      iWin = mine>field[0].ms || (mine===field[0].ms && Net.role==="host");
+    }
+    if(iWin) take(); else lose();
+    return;
+  }
+
+  /* Not decidable yet, and a well that looks alive here may only be one whose
+     death has not been read back — the whole point of the race. So "someone
+     outlived me" is trusted only once a death has had time to travel: one poll
+     and one write, which is what the settle window is. Past it, a player with
+     no death published really is still playing.
+
+     A missing duration waits longer, and then loses rather than being guessed
+     at: two clients guessing differently would each publish a win. */
+  if(since < TIE_SETTLE) return;
+  if(field.some(p=>p.done && !(p.ms>0)) && since < TIE_CAP) return;
+  lose();
 }
 
 /* Out of the round, now, and said out loud.
@@ -2811,13 +2903,15 @@ function startMatch(){
   Net.lastB="";                       // a rematch starts from an empty well, not the last one sent
   const spectating=Room.on && !!(Room.me()&&Room.me().spec);
   if(Room.on){
-    Room.set("d",false); Room.set("b",null); Room.set("rdy",false);
-    /* Anything still addressed here is the last round's — an attack sent in the
-       instant before the sender saw the well stop, which poll() drops on the
-       floor while G is over but which lands as real garbage if the next round
-       has already begun. No attack can be sent in the countdown ahead, so
-       there is nothing of this round's to lose. */
-    Room.set("g",null);
+    /* One merge rather than five writes, and the last round's death, duration
+       and board all have to be gone before the next one is read.
+
+       g is the garbage still addressed here: an attack sent in the instant
+       before the sender saw this well stop, which poll() drops on the floor
+       while G is over but which lands as real lines if the next round has
+       already begun. No attack of the round ahead can exist yet — the
+       countdown has not even run — so there is nothing of it to lose. */
+    Room.mark({d:false, ms:null, b:null, rdy:false, g:null});
     /* The write is a round trip away, and the host decides whether to call a
        start from this same list on this same tick: leave it saying "ready" and
        it calls a second one. */
@@ -2848,7 +2942,7 @@ function startGame(mode){
   COUNT=3; countEnd=now()+3000; startHoldEnd=0;
   if(mode==="versus"){
     Room.starting=0;                     // the call has become a well; the room may call the next one
-    FOES.forEach(f=>{ f.board=null; f.sent=0; f.score=0; f.dead=false; });
+    FOES.forEach(f=>{ f.board=null; f.sent=0; f.score=0; f.dead=false; f.ms=0; });
   }
   else FOES=[];
   FX.banners.length=0; FX.clearBanners.length=0; FX.bob=FX.bobV=0;
@@ -2886,6 +2980,9 @@ function loop(t){
       G.tick(dt,{soft:Input.soft});
     }
     drainEvents();
+    /* Every frame rather than every poll: the wait a tie-break falls back on
+       has to run out on its own clock, and P2P has no poll to hang it off. */
+    resolveRound();
     /* Only a well that actually played the round gets tallied. A spectator is
        over from its first frame and a stranded one never finished, and either
        one falling into settleScore() scored 0 against a FOES list that had not
@@ -2936,10 +3033,15 @@ function drainEvents(){
         }
         break;
       case "dead":
-        if(Net.mode==="room"){ if(Room.on) Room.set("d",true); }
-        else if(Net.ready()) Net.send({t:"d"});
+        if(Net.mode==="room"){ if(Room.on) Room.mark({d:true, ms:G.lasted()}); }
+        else if(Net.ready()) Net.send({t:"d", ms:G.lasted()});
         // under the score rule a stopped well is not a loss yet, only a total
-        if(G.rule==="score") UI.matchPending(); else UI.gameOver(false);
+        if(G.rule==="score") UI.matchPending();
+        /* Nor is it a loss under the attack rule until the round is called: the
+           player who stopped this well may have stopped first. resolveRound()
+           puts the card up, one poll later in the ordinary case. */
+        else if(G.mode==="versus" && !G.spectating && !G.stranded){ G.pending=true; G.pendingAt=now(); }
+        else UI.gameOver(false);
         break;
       case "win": UI.gameOver(true); break;
     }
@@ -3325,6 +3427,13 @@ const Room = {
     if(this.host) FB.patch("/lobby/"+this.id,{n:CFG.name, t:Date.now(), c:this.players.length||1}).catch(()=>{});
   },
   set(k,v){ if(this.on) FB.put(this.mine()+"/"+k,v).catch(()=>{}); },
+  /* Several keys in one merge. The death and the run it ended have to land
+     together — a reader that saw d without ms would take the missing duration
+     for a short one and hand the round to the wrong player — and the writes a
+     round begins with are a set rather than a sequence for the same reason.
+     Merged, so the name, seat and win count underneath are left alone; a null
+     clears its key, which is what the round reset wants. */
+  mark(o){ if(this.on) FB.patch(this.mine(),o).catch(()=>{}); },
   /* Merged, not replaced: the room node also carries the host and the go. */
   pushRule(){ if(this.on&&this.host) FB.patch(this.path(),{r:NET_RULE}).catch(()=>{}); },
   /* Addressed, and queued rather than last-value: two attacks in one tick
@@ -3390,7 +3499,7 @@ const Room = {
       const list=Object.keys(v.p).map(pid=>{
         const r=v.p[pid]||{};
         return {pid, n:String(r.n||"").slice(0,12)||T("opponent"), j:r.j||0, t:r.t||0,
-                rdy:!!r.rdy, w:r.w|0, d:!!r.d, b:r.b||null, spec:!!r.spec};
+                rdy:!!r.rdy, w:r.w|0, d:!!r.d, ms:r.ms|0, b:r.b||null, spec:!!r.spec};
       }).filter(p=>p.pid===PID || nowMs-p.t<ROOM_GONE)
         .sort((a,b)=>a.j-b.j||(a.pid<b.pid?-1:1));
 
@@ -3453,7 +3562,7 @@ const Room = {
         this.starting=now();
         /* Whoever is in the room as the start lands is in the round —
            spectators excluded, so a foe's board never shows one, and
-           checkLastStanding()/roster.size never count one. */
+           resolveRound()/roster.size never count one. */
         this.roster=new Map(list.filter(p=>!p.spec).map(p=>[p.pid,p.j]));
         this.dropped.clear();
         NET_SEED=v.go.s>>>0;
@@ -3478,7 +3587,7 @@ const Room = {
          flag or a new chat line changes without the roster's length
          changing at all, and the room screen needs to pick both up. */
       UI.renderRoom();
-      if(G && G.mode==="versus" && !G.over) checkLastStanding();
+      // the round is resolved from the loop, which runs whether or not a poll lands
       if(this.host) this.maybeStart();
     }catch(e){ /* one dropped poll is not a lost room */ }
     if(this.on) this.timer=setTimeout(()=>this.poll(),ROOM_MS);
@@ -3681,9 +3790,10 @@ const Net = {
         }
         break;
       case "d":
-        if(FOES[0]) FOES[0].dead=true;
+        // the run that ended travels with the death; resolveRound() needs both
+        if(FOES[0]){ FOES[0].dead=true; FOES[0].ms=m.ms|0; }
         // only under the attack rule is the last well standing the winner
-        if(G && !G.over && G.attacks) G.win();
+        if(G && !G.over && G.attacks){ G.resolved=true; G.win(); }
         break;
       case "m":
         if(this.role==="guest"){ NET_RULE = m.r==="score" ? "score" : "attack"; UI.renderRoom(); }
