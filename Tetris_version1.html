@@ -4089,7 +4089,7 @@ document.addEventListener("pointerdown",e=>{
 $$("[data-go]").forEach(b=>b.onclick=()=>{
   Sfx.unlock(); Sfx.ui();
   const go=b.dataset.go;
-  if(go==="solo"||go==="sprint"){ UI.closeAll(); afterScreen(()=>startGame(go)); }
+  if(go==="solo"||go==="sprint"){ tryEnterFs(); UI.closeAll(); afterScreen(()=>startGame(go)); }
   else if(go==="play") UI.show("#v-play");
   else if(go==="versus"){ Net.reset(); UI.show("#v-lobby"); }
   else if(go==="speed") UI.show("#v-speed");
@@ -4103,6 +4103,7 @@ $$("[data-back]").forEach(b=>b.onclick=()=>{ Sfx.ui(); UI.back("#"+b.closest(".v
 $$("[data-speed]").forEach(b=>b.onclick=()=>{
   Sfx.unlock(); Sfx.ui();
   CFG.speedDiff=b.dataset.speed; saveCfg();
+  tryEnterFs();
   UI.closeAll();
   afterScreen(()=>startGame("speed"));
 });
@@ -4479,14 +4480,18 @@ $("#pausebtn").addEventListener("pointerdown",e=>e.stopPropagation());
 
 /* fullscreen — hidden on iPhone Safari, which has no element fullscreen.
    CFG.fullscreen is the saved preference; the live fullscreen element is
-   the truth once the page can act on it. A click on the toggle is itself
-   a user gesture, so it can ask for fullscreen right there — but a page
-   load can't, so a saved "on" instead waits for the very first gesture
-   anywhere on the page and asks then. */
+   the truth once the page can act on it. requestFullscreen() only honors
+   a call made synchronously inside a real user gesture's own handler, so
+   a page load can't just call it — tryEnterFs() is called directly from
+   the solo/sprint/speed start buttons' own onclick (above, before their
+   startGame() runs on a delayed afterScreen(), which is too late to
+   count as the gesture) and from a catch-all first pointerdown for every
+   other path into the game (versus, or just clicking around first). */
 const fsEl =()=>document.fullscreenElement||document.webkitFullscreenElement||null;
 const fsCan=!!(document.documentElement.requestFullscreen||document.documentElement.webkitRequestFullscreen);
 function enterFs(){ try{ (document.documentElement.requestFullscreen||document.documentElement.webkitRequestFullscreen).call(document.documentElement); }catch(_){} }
 function exitFs(){ try{ (document.exitFullscreen||document.webkitExitFullscreen).call(document); }catch(_){} }
+function tryEnterFs(){ if(fsCan && CFG.fullscreen && !fsEl()) enterFs(); }
 
 if(fsCan){
   $("#full-row").hidden=false;
@@ -4508,12 +4513,11 @@ if(fsCan){
     layout();
     setTimeout(layout,120);
   };
-  if(CFG.fullscreen && !fsEl()){
-    document.addEventListener("pointerdown",function tryFs(){
-      document.removeEventListener("pointerdown",tryFs);
-      if(CFG.fullscreen && !fsEl()) enterFs();
-    },{once:true});
-  }
+  // Not {once:true}: a rejected/ignored request (the gesture didn't
+  // qualify, a permission prompt was dismissed, etc.) shouldn't use up
+  // the only try — keep listening on every pointerdown until it actually
+  // lands in fullscreen.
+  document.addEventListener("pointerdown",()=>tryEnterFs());
   document.addEventListener("fullscreenchange",syncFs);
   document.addEventListener("webkitfullscreenchange",syncFs);
 }
