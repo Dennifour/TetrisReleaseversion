@@ -417,6 +417,10 @@ html[lang=ko] .fold summary h3{letter-spacing:.02em}
 .opts .sp{border-top:0;padding:13px 0}
 .opts.lined .sp{border-top:1px solid var(--line)}
 .opts .sp.rng{display:block;padding:14px 0 16px}
+.tile-label{display:flex;align-items:center;gap:10px}
+.tile-swatch{width:22px;height:22px;border-radius:5px;flex:0 0 auto;background-size:cover;background-position:center}
+.tile-actions{display:flex;align-items:center;gap:4px;flex:0 0 auto}
+.tile-actions .mi{padding:5px 12px;font-size:13px}
 .opts .sp.rng input[type=range]{display:block;width:100%;flex:none;margin-top:13px}
 .sp.moot{opacity:.4;pointer-events:none}
 .opts .full{grid-column:1/-1}
@@ -739,6 +743,9 @@ html[lang=ko] .fold summary h3{letter-spacing:.02em}
             <div class="sp"><span data-i18n="set_bob"></span><div class="sw on" id="s-bob"></div></div>
             <div class="sp rng"><span><span data-i18n="set_boardsize"></span><small id="l-boardsize"></small></span><input type="range" id="s-boardsize" min="40" max="100" step="5"></div>
           </div>
+          <h3 data-i18n="set_tiles"></h3>
+          <p class="hint" data-i18n="set_tiles_hint"></p>
+          <div class="opts tiles" id="tile-rows"></div>
         </section>
 
         <section class="panel" data-panel="audio" role="tabpanel">
@@ -838,7 +845,7 @@ const isCoarse = () => matchMedia("(pointer:coarse)").matches && matchMedia("(ho
 
 const store = {
   get(k,d){ try{ const v=localStorage.getItem("tfx:"+k); return v===null?d:JSON.parse(v);}catch(e){return d;} },
-  set(k,v){ try{ localStorage.setItem("tfx:"+k,JSON.stringify(v)); }catch(e){} },
+  set(k,v){ try{ localStorage.setItem("tfx:"+k,JSON.stringify(v)); return true; }catch(e){ return false; } },
   del(k){ try{ localStorage.removeItem("tfx:"+k); }catch(e){} }
 };
 ["turnUrl","turnUser","turnPass","fbUse"].forEach(k=>store.del(k));
@@ -877,6 +884,7 @@ const CFG = {
   btnY:  store.get("btnY",0),
   btnX:  store.get("btnX",0),
   fbUrl: store.get("fbUrl",""),         // Firebase Realtime Database, for online play
+  tiles: store.get("tiles",null) || {}, // per-piece custom tile images, data URLs keyed by I/O/T/S/Z/J/L
   touch: store.get("touch", isCoarse()?"swipe":"off"),  // dpad | swipe | off
   touchSet: store.get("touchSet",false),   // the player picked one, rather than being handed the default
   swMove: store.get("swMove",80),       // % of a cell to drag for one step sideways
@@ -1162,6 +1170,10 @@ const I18N = {
   set_swdrop:["Drag to drop one row","한 줄 드롭 거리"],
   set_swflick:["Flick speed for a hard drop","하드 드롭 튕김 속도"],
   set_swipe:["SWIPE","스와이프"],
+  set_tile_reset:["reset","초기화"],
+  set_tile_upload:["upload","업로드"],
+  set_tiles:["Tetromino tiles","테트로미노 타일"],
+  set_tiles_hint:["Upload a square image per piece to use in place of its colour.","조각마다 정사각형 이미지를 올리면 색 대신 타일로 사용됩니다."],
   set_swipe_s:["No buttons: drag sideways to move, drag down to soft drop, flick down to hard drop, drag up to hold, tap to rotate.","버튼 없이 조작합니다. 좌우로 끌면 이동, 아래로 끌면 소프트 드롭, 아래로 튕기면 하드 드롭, 위로 끌면 홀드, 탭하면 회전."],
   set_swmove:["Drag to move one cell","한 칸 이동 거리"],
   set_swreset:["RESET SENSITIVITY","감도 초기화"],
@@ -1374,6 +1386,19 @@ const PIECE_COLOR = {
   I:"#4fd0e0", O:"#e0c94f", T:"#a86fe0", S:"#4fe07a",
   Z:"#e0625f", J:"#5f8fe0", L:"#e0954f", G:"#5a5a5a"
 };
+
+/* User-uploaded tile textures, one per piece type, drawn in block() in
+   place of the flat fill when present. Loaded from CFG.tiles' data URLs at
+   startup; `Image.complete` gates each draw so a texture never flashes in
+   half-loaded or blocks the first frame on a slow decode. */
+const PIECE_TILE = {};
+function loadTile(type,url){
+  if(!url){ delete PIECE_TILE[type]; return; }
+  const img=new Image();
+  img.src=url;
+  PIECE_TILE[type]=img;
+}
+for(const t in CFG.tiles) loadTile(t,CFG.tiles[t]);
 
 /* 3 · GAME CORE */
 const COLS=10, VIS_ROWS=20, BUFFER=2, ROWS=VIS_ROWS+BUFFER;
@@ -1936,8 +1961,13 @@ function label(txt,x,y,maxW){
    anything drawn here. */
 function block(x,y,s,type,alpha=1){
   ctx.globalAlpha=alpha;
-  ctx.fillStyle=PIECE_COLOR[type]||PIECE_COLOR.G;
-  ctx.fillRect(x,y,s,s);
+  const img=PIECE_TILE[type];
+  if(img && img.complete && img.naturalWidth){
+    ctx.drawImage(img,x,y,s,s);
+  }else{
+    ctx.fillStyle=PIECE_COLOR[type]||PIECE_COLOR.G;
+    ctx.fillRect(x,y,s,s);
+  }
   ctx.globalAlpha=1;
 }
 
@@ -4339,6 +4369,63 @@ $$(".lang").forEach(b=>{
 
 $("#s-fb").value=CFG.fbUrl;
 $("#s-fb").oninput=e=>{ CFG.fbUrl=e.target.value.trim(); saveCfg(); };
+
+/* One row per piece type: an upload label wired to a hidden file input,
+   a swatch preview (the flat colour underneath so it still reads once a
+   custom tile is cleared), and a reset button shown only while a custom
+   tile is set. Built once from TYPES rather than hand-written per row. */
+function paintTileRow(t){
+  $("#tw-"+t).style.backgroundColor=PIECE_COLOR[t];
+  $("#tw-"+t).style.backgroundImage=CFG.tiles[t]?`url("${CFG.tiles[t]}")`:"none";
+  $("#tr-"+t).hidden=!CFG.tiles[t];
+}
+$("#tile-rows").innerHTML=TYPES.map(t=>`
+  <div class="sp tile-row">
+    <span class="tile-label"><span class="tile-swatch" id="tw-${t}"></span>${t}</span>
+    <span class="tile-actions">
+      <label class="mi ghost tile-upload" for="tf-${t}" data-i18n="set_tile_upload"></label>
+      <input type="file" id="tf-${t}" accept="image/*" hidden>
+      <button type="button" class="mi ghost tile-reset" id="tr-${t}" data-i18n="set_tile_reset" hidden></button>
+    </span>
+  </div>`).join("");
+TYPES.forEach(t=>{
+  paintTileRow(t);
+  $("#tf-"+t).onchange=e=>{
+    const file=e.target.files[0];
+    e.target.value="";
+    if(!file || !file.type.startsWith("image/")) return;
+    const reader=new FileReader();
+    reader.onload=()=>{
+      const img=new Image();
+      img.onload=()=>{
+        // Square-crop to the shorter side, then downscale to a fixed tile
+        // resolution — a phone photo would otherwise carry megabytes into
+        // localStorage, which has no room for seven of them.
+        const size=128, side=Math.min(img.naturalWidth,img.naturalHeight);
+        const c=document.createElement("canvas");
+        c.width=c.height=size;
+        c.getContext("2d").drawImage(img,
+          (img.naturalWidth-side)/2,(img.naturalHeight-side)/2,side,side, 0,0,size,size);
+        const url=c.toDataURL("image/jpeg",0.85);
+        CFG.tiles[t]=url;
+        if(store.set("tiles",CFG.tiles)){
+          loadTile(t,url); paintTileRow(t); Sfx.ui();
+        }else{
+          delete CFG.tiles[t];   // quota exceeded — leave the old tile (or lack of one) in place
+        }
+      };
+      img.src=reader.result;
+    };
+    reader.readAsDataURL(file);
+  };
+  $("#tr-"+t).onclick=()=>{
+    Sfx.ui();
+    delete CFG.tiles[t];
+    store.set("tiles",CFG.tiles);
+    loadTile(t,null);
+    paintTileRow(t);
+  };
+});
 
 $("#s-name").value=CFG.name;
 $("#s-name").oninput=e=>{
