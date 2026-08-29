@@ -1961,12 +1961,17 @@ function label(txt,x,y,maxW){
    anything drawn here. */
 function block(x,y,s,type,alpha=1){
   ctx.globalAlpha=alpha;
+  // Snap to the same integer grid every cell rounds to, so two cells that
+  // are meant to touch (bx+x*cell, bx+(x+1)*cell) always round to the exact
+  // same shared edge instead of each drifting a fraction of a px on its
+  // own — that drift is what left a hairline gap between neighbours.
+  const x0=Math.round(x), y0=Math.round(y), w=Math.round(x+s)-x0, h=Math.round(y+s)-y0;
   const img=PIECE_TILE[type];
   if(img && img.complete && img.naturalWidth){
-    ctx.drawImage(img,x,y,s,s);
+    ctx.drawImage(img,x0,y0,w,h);
   }else{
     ctx.fillStyle=PIECE_COLOR[type]||PIECE_COLOR.G;
-    ctx.fillRect(x,y,s,s);
+    ctx.fillRect(x0,y0,w,h);
   }
   ctx.globalAlpha=1;
 }
