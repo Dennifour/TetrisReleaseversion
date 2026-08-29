@@ -1505,6 +1505,7 @@ class Game {
     this.pendingGarbage=[];
     this.garbageHole=rnd(COLS);
     this.over=false; this.won=false; this.paused=false; this.spectating=false;
+    this.stranded=false;               // the room went away mid-match; no result to read
     this.startedAt=now(); this.endedAt=0;
     this.pieceCount=0;
     this.dropTimer=0; this.lockTimer=0; this.lockResets=0; this.grounded=false;
@@ -2811,6 +2812,12 @@ function startMatch(){
   const spectating=Room.on && !!(Room.me()&&Room.me().spec);
   if(Room.on){
     Room.set("d",false); Room.set("b",null); Room.set("rdy",false);
+    /* Anything still addressed here is the last round's — an attack sent in the
+       instant before the sender saw the well stop, which poll() drops on the
+       floor while G is over but which lands as real garbage if the next round
+       has already begun. No attack can be sent in the countdown ahead, so
+       there is nothing of this round's to lose. */
+    Room.set("g",null);
     /* The write is a round trip away, and the host decides whether to call a
        start from this same list on this same tick: leave it saying "ready" and
        it calls a second one. */
@@ -2879,7 +2886,12 @@ function loop(t){
       G.tick(dt,{soft:Input.soft});
     }
     drainEvents();
-    if(G.rule==="score" && G.over && !G.settled) settleScore();
+    /* Only a well that actually played the round gets tallied. A spectator is
+       over from its first frame and a stranded one never finished, and either
+       one falling into settleScore() scored 0 against a FOES list that had not
+       filled in yet — reading as a win, which then took a game-over screen, a
+       personal best and a published win count with it. */
+    if(G.rule==="score" && G.over && !G.settled && !G.spectating && !G.stranded) settleScore();
   }
   FX.step(dt);
   render(G,G?FOES:null);
@@ -3282,7 +3294,7 @@ const Room = {
     this.poll();
   },
 
-  stop(){
+  stop(gone){
     if(!this.on && !this.id) return;
     const id=this.id, host=this.host;
     this.on=false;
@@ -3293,7 +3305,13 @@ const Room = {
     if(id && FB.on()){
       // the host owns the room and takes it down with it
       if(host){ FB.del("/lobby/"+id); FB.del("/rooms/"+id); }
-      else{ FB.del("/rooms/"+id+"/p/"+PID); FB.put("/lobby/"+id+"/t",Date.now()); }
+      /* Leaving a room that is already gone must not write anything back:
+         PUTting the listing's timestamp recreated /lobby/<id> as a nameless,
+         seatless entry that then advertised an unjoinable room for the two
+         minutes it took to go stale. Only touch the listing when there is
+         still a room under it. */
+      else if(!gone){ FB.del("/rooms/"+id+"/p/"+PID); FB.put("/lobby/"+id+"/t",Date.now()); }
+      else FB.del("/rooms/"+id+"/p/"+PID);
     }
     Who.inRoom(null);
   },
@@ -3349,12 +3367,19 @@ const Room = {
        beaten for as long as the room waits before writing a player off, so it
        already has. Coming back to a match everyone else has finished playing
        is not coming back to it. */
-    if(this.lastPoll && now()-this.lastPoll>ROOM_GONE) dropOut();
+    const stalled = !!this.lastPoll && now()-this.lastPoll>ROOM_GONE;
+    if(stalled) dropOut();
     this.lastPoll=now();
     try{
       const v=await FB.get(this.path());
       if(!this.on) return;
-      if(!v||!v.p){ UI.roomGone(); return; }
+      /* No /h means the room root is gone, not merely empty: the host took it
+         down and a heartbeat still in flight put a bare /p/<pid>/t back. Left
+         to the /p test alone that husk read as a live room with one nameless
+         player in it, which the migration below then handed itself, and the
+         new "host" re-advertised it in the lobby with everyone's names and
+         win counts wiped. /h only ever disappears with the room itself. */
+      if(!v||!v.p||!v.h){ UI.roomGone(); return; }
       /* Not while a start is in flight. The rule that counts is the one /go
          carried, and the well is built a screen-change later — long enough
          for two more polls to put the room's own rule back over it and build
@@ -3433,7 +3458,19 @@ const Room = {
         this.dropped.clear();
         NET_SEED=v.go.s>>>0;
         NET_RULE=v.go.r==="score"?"score":"attack";
-        startMatch();
+        /* A start seen on the far side of a poll that stopped running is a
+           start that may well have been called during it — a backgrounded tab
+           sitting on the room screen comes back to a /go it never saw go up.
+           Building a well from it drops that player into a round already under
+           way, out of step with a bag everyone else is several pieces into and
+           absent from every other client's roster, so their board is not even
+           drawn. The round is taken as seen rather than joined; they watch it
+           out and ready up for the next one.
+
+           Judged on this client's own clock rather than on how old v.go.at
+           looks: `at` is the host's wall clock, and two machines here are not
+           assumed to share one. */
+        if(!stalled) startMatch();
       }
 
       mirrorFoes(this.others().filter(p=>this.inRound(p)));
@@ -3538,16 +3575,15 @@ const Net = {
     this.setState("idle");
   },
 
-  /* The host owns the room and takes it down with it; a guest only clears the
-     branch it was writing. */
+  /* Room teardown belongs to Room.stop(), which reset() has already run by the
+     time this is reached — and which reads Room.host rather than Net.role. The
+     two disagree after a host migration: a host that stalled long enough to be
+     replaced still says role==="host" here, and wiping on that took a room away
+     from the players who had legitimately inherited it. Nothing else is left to
+     drop — /rooms/<id>/g was the old hand-swapped signalling node and no longer
+     exists — so this only lets go of the id. */
   dropRoom(){
     if(this.unwatch){ this.unwatch(); this.unwatch=null; }
-    if(this.room && FB.on()){
-      const id=this.room, host=this.role==="host";
-      const wipe=()=>{ if(host){ FB.del("/lobby/"+id); FB.del("/rooms/"+id); } else FB.del("/rooms/"+id+"/g"); };
-      wipe();
-      setTimeout(wipe,600);          // catch anything a write in flight recreated
-    }
     this.room=null;
   },
 
@@ -4084,28 +4120,44 @@ const UI = {
     const sig=log.length+":"+(log.length?log[log.length-1].key:"");
     if(!el || sig===this._chatLogSig) return;
     this._chatLogSig=sig;
+    /* Whose line it is comes off the key — say() ends it with the speaker's
+       pid — not off the display name, which is chosen and not unique: two
+       players who both left theirs at the default had every message in the
+       room, including each other's, drawn as their own. */
+    const said=m=>{ const i=String(m.key||"").indexOf("-"); return i<0?"":m.key.slice(i+1); };
     el.innerHTML = log.length ? log.map(m=>
-      '<div class="msg'+(m.n===CFG.name?" mine":"")+'"><div class="who">'+esc(m.n)+'</div><div class="txt">'+esc(m.m)+'</div></div>'
+      '<div class="msg'+(said(m)===PID?" mine":"")+'"><div class="who">'+esc(m.n)+'</div><div class="txt">'+esc(m.m)+'</div></div>'
     ).join("") : '<p class="empty">'+esc(T("chat_empty"))+'</p>';
     el.scrollTop=el.scrollHeight;
   },
   leaveRoom(){
-    clearInterval(this._rooms);
     Net.reset(); READY_P2P.me=READY_P2P.peer=false;
     this.show("#v-lobby");
+    this.doOnline();          // back on the list, so it keeps refreshing itself
+    afterScreen(()=>{ G=null; FOES=[]; render(null); document.body.classList.remove("playing"); });
+  },
+  /* A match whose room went out from under it cannot be finished — no foe
+     boards arrive, and nothing can ever call it won — so it is stopped rather
+     than frozen. Pausing left the well sitting there with no way to learn why,
+     and resuming from the pause menu only handed back a match that could not
+     end. */
+  strandedMatch(hintKey){
+    if(G && !G.over && G.mode==="versus"){ G.over=true; G.stranded=true; G.events.length=0; }
+    this.hideGameOver();
+    this.show("#v-lobby");
+    this.doOnline();
+    this.err("#lob-hint",T(hintKey),true);
     afterScreen(()=>{ G=null; FOES=[]; render(null); document.body.classList.remove("playing"); });
   },
   roomGone(){
     if(!Room.on) return;
-    Room.stop(); Net.reset();
-    if(G && !G.over && G.mode==="versus") G.paused=true;
-    else if(this.cur==="#v-room"){ this.show("#v-lobby"); this.err("#lob-hint",T("e_roomgone")); }
+    Room.stop(true); Net.reset();
+    this.strandedMatch("e_roomgone");
   },
   peerLost(){
     Net.reset();
     READY_P2P.me=READY_P2P.peer=false;
-    if(G && !G.over && G.mode==="versus") G.paused=true;
-    else if(this.cur==="#v-room"){ this.show("#v-lobby"); this.err("#lob-hint",T("e_peerleft")); }
+    this.strandedMatch("e_peerleft");
   },
 
   matchPending(){},
