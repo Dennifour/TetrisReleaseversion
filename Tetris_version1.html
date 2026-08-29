@@ -466,11 +466,13 @@ html[lang=ko] .fold summary h3{letter-spacing:.02em}
 }
 .seat-row.mine{border-color:var(--line-strong)}
 .seat-row.ready{border-color:#4fe0a8}
+.seat-row.battling{border-color:#5fb0ff}
 .seat-row.spectating{opacity:.6}
 .seat-row .w{font-size:14px;font-weight:700;font-variant-numeric:tabular-nums}
 .seat-row .w small{margin-left:5px;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--fg-faint);font-weight:600}
 .seat-row .nm{font-size:12.5px;font-weight:600;color:var(--fg-dim)}
 .seat-row.ready .nm{color:#4fe0a8}
+.seat-row.battling .nm{color:#5fb0ff}
 .match-panel .row{width:100%}
 .ready-row{width:100%}
 .ready-row>.mi{flex:1 1 0}
@@ -1136,6 +1138,7 @@ const I18N = {
   rec_tag:["Kept on this device","이 기기에 저장됩니다"],
   rec_wins:["VERSUS WINS","대전 승리"],
   room_alone:["A match needs two. Invite someone to join.","대전은 2명부터 시작합니다. 친구를 초대하세요."],
+  room_battling:["IN BATTLE","대전 중"],
   room_hint:["The match starts as soon as you are both ready.","두 사람이 모두 준비하면 바로 시작합니다."],
   room_hint_n:["{n} in the room. Everyone readies up, then it starts. Up to four.","방에 {n}명. 모두 준비하면 시작합니다. 최대 4명."],
   room_leave:["LEAVE","나가기"],
@@ -4004,10 +4007,18 @@ const UI = {
       :(Net.ready()?[{pid:PID,n:CFG.name,rdy:READY_P2P.me,w:WINS_P2P.me},
                      {pid:"peer",n:Net.peerName||T("opponent"),rdy:READY_P2P.peer,w:WINS_P2P.peer}]:[]);
     const active=players.filter(p=>!p.spec);
+    /* Only meaningful for a Room seat: a late joiner's own lastGo already
+       matches the room's on arrival (see Room.join()), so they never
+       auto-start into a round already under way and can sit here watching
+       it instead — the one place another seat's "still playing" state is
+       worth a tag rather than implied by which screen you're on. P2P's two
+       seats always start and return to this screen together, so neither
+       is ever mid-match while the other one looks at a seat list. */
     const rows=players.map(p=>{
       const you=p.pid===PID;
-      return '<div class="seat-row'+(p.rdy?" ready":"")+(p.spec?" spectating":"")+(you?" mine":"")+'" data-pid="'+esc(p.pid)+'">'+
-        '<div class="nm">'+esc(p.n)+(you?" · "+esc(T("room_you")):"")+(p.spec?" · "+esc(T("room_spectating")):"")+'</div>'+
+      const battling=inRoom&&!!Room.lastGo&&!p.spec&&!p.d&&Room.inRound(p);
+      return '<div class="seat-row'+(p.rdy?" ready":"")+(battling?" battling":"")+(p.spec?" spectating":"")+(you?" mine":"")+'" data-pid="'+esc(p.pid)+'">'+
+        '<div class="nm">'+esc(p.n)+(you?" · "+esc(T("room_you")):"")+(p.spec?" · "+esc(T("room_spectating")):"")+(battling?" · "+esc(T("room_battling")):"")+'</div>'+
         '<div class="w">'+(p.w|0)+'<small>'+esc(T("room_wins"))+'</small></div></div>';
     });
     host.innerHTML=rows.join("");
