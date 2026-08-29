@@ -23,6 +23,30 @@
   --radius:4px;
 }
 
+/* Settings has no surface of its own behind it — it reads straight off the
+   user's own Grainient wash — so its text/line tokens are brighter than
+   the app-wide defaults above and flip to a dark set (updateMenuInk(), in
+   the script) when that wash turns light or bright enough that white ink
+   would wash out. Redefining the tokens here, scoped to #v-set, is enough:
+   every rule elsewhere already reads var(--fg)/var(--line)/var(--surface)
+   and repaints on its own, nothing else needs to change. */
+#v-set{
+  --fg:#ffffff;
+  --fg-dim:#f2f2f5;
+  --fg-faint:#e2e2e7;
+  --line:rgba(255,255,255,.4);
+  --line-strong:rgba(255,255,255,.55);
+}
+:root[data-menu-ink="dark"] #v-set{
+  --fg:#0a0a0c;
+  --fg-dim:#1c1c1e;
+  --fg-faint:#35353a;
+  --line:rgba(0,0,0,.4);
+  --line-strong:rgba(0,0,0,.55);
+  --surface:#e9e9ec;
+  --surface-2:#dcdce0;
+}
+
 *,*::before,*::after{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;height:100%;height:100dvh;overflow:hidden;overscroll-behavior:none}
 body{
@@ -343,6 +367,20 @@ input.tf:focus,textarea.tf:focus{outline:none;color:var(--fg);border-color:var(-
 .sp small{display:block;margin-top:5px;color:var(--fg-faint);font-size:12.5px;line-height:1.5}
 .sp small[id]{opacity:.5}
 #o-stats{margin:2px 0 4px}
+
+/* Settings runs every line a size up from the app-wide defaults above —
+   it's read at arm's length against a moving background, not a bordered
+   card, so it needs the extra weight the rest of the UI doesn't. */
+#v-set h3{font-size:13px}
+#v-set .fold summary h3{font-size:16.5px}
+#v-set .hint{font-size:15px}
+#v-set .sp{font-size:16.5px}
+#v-set .sp b{font-size:16px}
+#v-set .sp small{font-size:13.5px}
+#v-set input.tf,#v-set textarea.tf{font-size:14.5px}
+#v-set .netstat{font-size:13px}
+#v-set .diag{font-size:12.5px}
+#v-set .mi::after{border-color:var(--fg)}
 
 .sw{
   width:42px;height:24px;border-radius:999px;background:var(--surface);
@@ -4452,9 +4490,27 @@ bindRange("#s-arr","arr","#l-arr",v=>v===0?T("u_instant"):T("u_ms",{v}));
 bindRange("#s-sdf","sdf","#l-sdf",v=>T("u_cps",{v}));
 bindRange("#s-vol","vol","#l-vol",v=>v+"%",()=>Sfx.setVol());
 
+/* Settings text sits directly on the user's own Grainient wash, so its ink
+   flips to black on top of a light/bright wash and stays white otherwise —
+   picked once from the 3 configured colors (weighted by perceived luma)
+   and the brightness slider, not sampled per pixel, but close enough for
+   a two-way call. #v-set's own --fg, --line, and --surface tokens are
+   redefined off data-menu-ink so every element already reading var(--fg),
+   var(--line) etc. inside it repaints without any rule needing to change. */
+function grainLuma(hex){
+  const m=/^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  if(!m) return 0.5;
+  return (0.299*parseInt(m[1],16)+0.587*parseInt(m[2],16)+0.114*parseInt(m[3],16))/255;
+}
+function updateMenuInk(){
+  const avg=(grainLuma(CFG.grColor1)+grainLuma(CFG.grColor2)+grainLuma(CFG.grColor3))/3;
+  const eff=avg*clamp(CFG.grBright/100,0,2);
+  document.documentElement.dataset.menuInk = eff>0.55 ? "dark" : "light";
+}
+
 /* menu Grainient background — Settings → Video → Menu background */
 bindRange("#s-grspeed","grSpeed","#l-grspeed",v=>v+"%",()=>GrainientBG.setSpeed(CFG.grSpeed/100));
-bindRange("#s-grbright","grBright","#l-grbright",v=>v+"%",()=>GrainientBG.setBrightness(CFG.grBright/100));
+bindRange("#s-grbright","grBright","#l-grbright",v=>v+"%",()=>{ GrainientBG.setBrightness(CFG.grBright/100); updateMenuInk(); });
 $("#s-grmotion").classList.toggle("on",CFG.grMotion);
 $("#s-grmotion").onclick=()=>{
   CFG.grMotion=!CFG.grMotion;
@@ -4468,6 +4524,7 @@ $("#s-grmotion").onclick=()=>{
   el.oninput=()=>{
     CFG[key]=el.value; saveCfg();
     GrainientBG.setColors([CFG.grColor1,CFG.grColor2,CFG.grColor3]);
+    updateMenuInk();
   };
 });
 
@@ -4842,6 +4899,7 @@ UI.netStatus();
 render(null);
 GrainientBG.init($("#grainient-bg"));
 GrainientBG.setActive(true);
+updateMenuInk();
 /* Solo can wait for its player. A match cannot: the room has three other
    people in it, and the tab that just went away is about to stop running. */
 document.addEventListener("visibilitychange",()=>{
