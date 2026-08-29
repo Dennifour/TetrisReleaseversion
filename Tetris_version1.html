@@ -51,6 +51,9 @@ body{
 
 /* The board fades with the run it belongs to: in when one starts, out once
    there's no run left. */
+/* Fading out is this .3s, not .live's — the class is what gets removed. The
+   canvas is only cleared once it has run (BOARD_FADE_MS), so the two are a
+   pair: blanking the well while it is still on screen reads as a flicker. */
 #screen{
   position:relative;width:var(--screen-w);height:var(--screen-h);overflow:hidden;
   opacity:0;transition:opacity .3s ease;
@@ -3982,6 +3985,22 @@ const NET_SCREENS = {"#v-host":1,"#v-join":1};
 const EXIT_MS=100;
 function afterScreen(fn){ setTimeout(fn,EXIT_MS); }
 
+/* Long enough for the board to have finished fading out — it is #screen's own
+   opacity transition, and the two have to stay in step. Clearing the canvas on
+   the screen beat instead blanked a well still two thirds visible, which is a
+   flicker rather than an exit. */
+const BOARD_FADE_MS=320;
+/* Letting go of the board on the way to a menu. The well is frozen by the time
+   anyone can quit — paused, or over — so it costs nothing to leave it up for
+   the length of its own fade, and G is only dropped once there is nothing left
+   to see. The round is marked settled first: resolveRound() would otherwise
+   still be weighing it while the screen went, and put a verdict up on a match
+   its player had already walked out of. */
+function dropBoard(){
+  if(G){ G.resolved=true; G.pending=false; }
+  setTimeout(()=>{ G=null; FOES=[]; render(null); },BOARD_FADE_MS);
+}
+
 const UI = {
   cur:"#v-home",
 
@@ -4007,9 +4026,19 @@ const UI = {
       el.classList.add("on");
       this.cur=id;
     }else this.cur=null;
-    document.body.classList.toggle("playing",!!G && !this.cur);
-    $("#screen").classList.toggle("live",!!G);
+    /* Not on the inner call. Crossing from one screen to another parks at
+       cur=null for a beat, which is the same state gameplay sits in — read
+       literally it says "no screen is up, show the board", and the well and
+       the touch pads flashed up between two menus. The destination decided
+       both of these on the way in (board(id) above); the beat in the middle
+       is not a change of mind. */
+    if(!inner) document.body.classList.toggle("playing",!!G && !this.cur);
   },
+  /* The one place the board's visibility is decided: a well is on screen when
+     there is one and nothing is covering it. This used to be set a second time
+     at the end of show() from !!G alone, which put it straight back the moment
+     a menu opened over a game — the board never faded, it sat there lit until
+     the canvas was cleared out from under it. */
   board(id){ $("#screen").classList.toggle("live", !!G && !id); },
   closeAll(){ this.show(null); },
   back(from){
@@ -4053,7 +4082,7 @@ const UI = {
     $("#pause-menu").classList.remove("on");
     if(G && G.mode==="versus"){ this.leaveRoom(); return; }
     this.show("#v-home");
-    afterScreen(()=>{ G=null; FOES=[]; render(null); document.body.classList.remove("playing"); });
+    dropBoard();
   },
 
   /* Versus shares this overlay with solo/sprint/speed rather than going
@@ -4325,7 +4354,7 @@ const UI = {
     Net.reset(); READY_P2P.me=READY_P2P.peer=false;
     this.show("#v-lobby");
     this.doOnline();          // back on the list, so it keeps refreshing itself
-    afterScreen(()=>{ G=null; FOES=[]; render(null); document.body.classList.remove("playing"); });
+    dropBoard();
   },
   /* A match whose room went out from under it cannot be finished — no foe
      boards arrive, and nothing can ever call it won — so it is stopped rather
@@ -4338,7 +4367,7 @@ const UI = {
     this.show("#v-lobby");
     this.doOnline();
     this.err("#lob-hint",T(hintKey),true);
-    afterScreen(()=>{ G=null; FOES=[]; render(null); document.body.classList.remove("playing"); });
+    dropBoard();
   },
   roomGone(){
     if(!Room.on) return;
