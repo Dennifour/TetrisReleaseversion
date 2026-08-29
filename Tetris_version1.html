@@ -439,13 +439,12 @@ html[lang=ko] .fold summary h3{letter-spacing:.02em}
    panels want the width. Below 760px the panels stack in document order
    (players, match, chat). At 760px and up, players and match sit as a
    compact top row sized to their own content — a seat list tops out at
-   four rows and shouldn't claim a whole column's height — and chat takes
-   the second row full-width. Chat gets a fixed, comfortable height of
-   its own rather than stretching to fill whatever's left of the
-   viewport: a room with a short seat list shouldn't hand the rest of
-   the screen to the chat log. Seats are a status display, not
-   navigation, so they keep an at-rest border like the lobby's .room-row,
-   and so does every other panel here. */
+   four rows and shouldn't claim a whole column's height — and chat sits
+   below the players column at the same width, rather than stretching
+   across both: a log of short messages doesn't need the full row any
+   more than it needed the full viewport height. Seats are a status
+   display, not navigation, so they keep an at-rest border like the
+   lobby's .room-row, and so does every other panel here. */
 #v-room .card{width:100%;max-width:none;display:flex;flex-direction:column;gap:16px}
 .dash-head{display:flex;align-items:center;gap:16px 24px;flex-wrap:wrap}
 .dash-head .hint{margin:0;flex:1 1 220px}
@@ -507,7 +506,7 @@ html[lang=ko] .fold summary h3{letter-spacing:.02em}
 @media (min-width:760px){
   .dash-grid{
     grid-template-columns:1fr 1fr;grid-template-rows:auto auto;
-    grid-template-areas:"seats match" "chat chat";
+    grid-template-areas:"seats match" "chat .";
   }
   .seats-panel{grid-area:seats}
   .match-panel{grid-area:match}
