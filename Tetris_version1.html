@@ -734,9 +734,6 @@ html[lang=ko] .fold summary h3{letter-spacing:.02em}
             <div class="sp"><span data-i18n="set_bob"></span><div class="sw on" id="s-bob"></div></div>
             <div class="sp rng"><span><span data-i18n="set_boardsize"></span><small id="l-boardsize"></small></span><input type="range" id="s-boardsize" min="40" max="100" step="5"></div>
           </div>
-          <h3 data-i18n="set_bg"></h3>
-          <div class="sp rng" id="bg-brightrow" hidden><span><span data-i18n="set_bg_bright"></span><small id="l-bg"></small></span><input type="range" id="s-bg" min="0" max="100" step="5"></div>
-          <p class="hint" id="bg-hint"></p>
         </section>
 
         <section class="panel" data-panel="audio" role="tabpanel">
@@ -994,8 +991,6 @@ const I18N = {
   b_sendto:["{n} TO {who}","{who}에게 {n}줄"],
   b_tspin:["T-SPIN","T스핀"],
   back:["BACK","뒤로"],
-  bg_hint_off:["This theme has no background image.","이 테마에는 배경 이미지가 없습니다."],
-  bg_hint_set:["Shown around the board while you play — never on a menu.","플레이 중 보드 주변에 표시됩니다. 메뉴에서는 표시되지 않습니다."],
   btn_hold:["HOLD","홀드"],
   btn_pause:["PAUSE","정지"],
   c_audio:["AUDIO","소리"],
@@ -1127,8 +1122,6 @@ const I18N = {
   rule_score:["HIGH SCORE","점수전"],
   rule_score_s:["Three minutes, nothing sent across. The highest score wins.","3분 동안 방해 줄 없이 겨루고, 점수가 가장 높은 사람이 승리합니다."],
   set_arr:["ARR — auto-shift repeat","ARR — 자동 이동 간격"],
-  set_bg:["Background","배경"],
-  set_bg_bright:["Brightness","밝기"],
   set_bind_hint:["Tap a row, then press the key you want. A key can only do one thing, so it is taken off anything else.","항목을 누른 뒤 원하는 키를 입력하세요. 한 키는 한 동작에만 배정되며 기존 배정은 해제됩니다."],
   set_boardsize:["Board size","보드 크기"],
   set_bob:["Board give","보드 반동"],
@@ -4044,7 +4037,6 @@ const UI = {
     $$("#set-rail [data-tab]").forEach(b=>b.classList.toggle("on",b.dataset.tab===name));
     $$("#v-set .panel").forEach(p=>p.classList.toggle("on",p.dataset.panel===name));
     if(name==="controls"){ repaintSettings(); paintTouch(); bindRows("#keylist","keys"); bindRows("#padlist","pads"); paintPad(); }
-    if(name==="video"){ paintBg(); }
     if(name==="audio") repaintSettings();
   },
 
@@ -4288,14 +4280,6 @@ function bindRows(host,which){
     if(which==="keys") BINDING=done; else Pad.watching=done;
   });
 }
-
-function paintBg(){
-  const on=!!THEME.background;
-  $("#bg-brightrow").hidden=!on;
-  const bg=$("#bg-hint");
-  if(bg) bg.textContent=T(on?"bg_hint_set":"bg_hint_off");
-}
-bindRange("#s-bg","bgBright","#l-bg",v=>v+"%",applyBg);
 
 $$(".tmode").forEach(b=>b.onclick=()=>{
   Sfx.ui();
