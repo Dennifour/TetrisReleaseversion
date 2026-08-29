@@ -2008,11 +2008,15 @@ function label(txt,x,y,maxW){
    anything drawn here. */
 function block(x,y,s,type,alpha=1){
   ctx.globalAlpha=alpha;
-  // Snap to the same integer grid every cell rounds to, so two cells that
-  // are meant to touch (bx+x*cell, bx+(x+1)*cell) always round to the exact
-  // same shared edge instead of each drifting a fraction of a px on its
-  // own — that drift is what left a hairline gap between neighbours.
-  const x0=Math.round(x), y0=Math.round(y), w=Math.round(x+s)-x0, h=Math.round(y+s)-y0;
+  /* Snap every edge to a whole *device* pixel. Two things go wrong without
+     it: neighbouring cells land on slightly different fractional edges, and
+     an edge that falls mid-pixel gets antialiased against the well behind
+     rather than against its neighbour — two half-covered rects composite to
+     less than full coverage, leaving the hairline seam. Rounding in device
+     space (the ctx carries a DPR transform) fixes both: a shared boundary
+     resolves to one identical whole pixel for both cells, at any DPR. */
+  const q=v=>Math.round(v*DPR)/DPR;
+  const x0=q(x), y0=q(y), w=q(x+s)-x0, h=q(y+s)-y0;
   const img=PIECE_TILE[type];
   if(img && img.complete && img.naturalWidth){
     ctx.drawImage(img,x0,y0,w,h);
