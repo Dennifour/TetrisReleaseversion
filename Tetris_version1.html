@@ -80,19 +80,6 @@ body.playing #bg{opacity:var(--bg-bright,.45)}
 }
 body.playing #grainient-bg{opacity:0}
 
-/* Dims/blurs the grainient wash for every menu screen. Split out of .veil
-   itself (which only fades its own text/card) so the dim stays put across
-   the gap between one veil losing .on and the next gaining it — UI.show()
-   parks .cur on null for EXIT_MS mid-navigation, and with the dim living on
-   the veils it would drop out and flash the raw wash for that beat. */
-#menu-dim{
-  position:fixed;inset:0;z-index:9;pointer-events:none;
-  background:rgba(10,10,12,.74);
-  backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
-  opacity:1;transition:opacity .3s ease;
-}
-body.playing #menu-dim{opacity:0}
-
 /* One corner icon today — pause, shown only where swipe controls leave no
    pause button on the pads — kept as its own class rather than folded
    into .pausebtn so another corner icon can reuse the same look later. */
@@ -192,6 +179,8 @@ body.swap #act-wrap{transform:translate(calc(var(--shift-x,0px) * -1),var(--shif
      behind the keyboard. */
   height:var(--vvh,100dvh);
   padding:calc(env(safe-area-inset-top) + 16px) var(--edge) 16px;
+  background:rgba(10,10,12,.74);
+  backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
   overflow:hidden auto;overscroll-behavior:contain;touch-action:pan-y;
   opacity:0;visibility:hidden;pointer-events:none;
   /* Matches EXIT_MS: the fade-out finishes exactly as UI.show() moves on
@@ -511,7 +500,7 @@ html[lang=ko] .fold summary h3{letter-spacing:.02em}
 }
 
 @media (prefers-reduced-motion:reduce){
-  .veil,.mi,.mi::after,#menu-dim{transition-duration:.01ms;transition-delay:0s}
+  .veil,.mi,.mi::after{transition-duration:.01ms;transition-delay:0s}
   .panel.on{animation-duration:.01ms}
   .fold summary h3::after{transition-duration:.01ms}
   .foldbody{transition-duration:.01ms}
@@ -528,7 +517,6 @@ html[lang=ko] .fold summary h3{letter-spacing:.02em}
 
 <canvas id="grainient-bg" aria-hidden="true"></canvas>
 <div id="bg"></div>
-<div id="menu-dim" aria-hidden="true"></div>
 <div id="stage">
   <div id="screen"><canvas id="cv"></canvas></div>
 
