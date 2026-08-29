@@ -4497,10 +4497,14 @@ if(fsCan){
     saveCfg();
     if(fsEl()) exitFs(); else enterFs();
   });
+  /* Only the toggle's own click (above) writes CFG.fullscreen — this just
+     mirrors the live state onto the switch. Saving here too would mean any
+     exit (Escape, the browser's own control, even the tab just closing —
+     which fires this the same as a deliberate one) permanently cleared the
+     saved preference, so the "on" a user picked would silently never
+     survive to their next visit. */
   const syncFs=()=>{
-    CFG.fullscreen=!!fsEl();
-    saveCfg();
-    $("#s-full").classList.toggle("on",CFG.fullscreen);
+    $("#s-full").classList.toggle("on",!!fsEl());
     layout();
     setTimeout(layout,120);
   };
