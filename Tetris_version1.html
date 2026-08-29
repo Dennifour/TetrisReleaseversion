@@ -1459,6 +1459,10 @@ function mulberry32(a){
   };
 }
 let NET_SEED = 0;
+// One deterministic step from a shared seed to the next, so a P2P rematch
+// (which has no host to hand out a fresh one) still lands both peers on the
+// same new bag rather than replaying the last match's pieces.
+function advanceSeed(s){ return (Math.floor(mulberry32(s)()*4294967296)>>>0)||1; }
 
 class Bag {
   constructor(seed){ this.q=[]; this.rand = seed ? mulberry32(seed) : Math.random; }
@@ -2811,6 +2815,14 @@ function startMatch(){
        start from this same list on this same tick: leave it saying "ready" and
        it calls a second one. */
     const m=Room.me(); if(m) m.rdy=false;
+  }else{
+    /* A room's host draws a fresh seed for every /go; a hand-swapped P2P link
+       only ever agreed on one, in the offer code. Without this a rematch deals
+       the exact same bag every time — advanced the same deterministic step on
+       both ends, from the seed they already share, so no new exchange is
+       needed to stay in lockstep. */
+    NET_SEED = advanceSeed(NET_SEED);
+    READY_P2P.me=false; READY_P2P.peer=false;
   }
   UI.renderRoom();
   UI.closeAll();
@@ -4061,14 +4073,17 @@ const UI = {
     this.paintRule();
     this.renderChat();
   },
-  /* Only re-painted (and scrolled to the end) when the message count
-     actually changes, so a reader scrolled up through history isn't
-     yanked back down on every room poll. */
+  /* Only re-painted (and scrolled to the end) when the log actually changes,
+     so a reader scrolled up through history isn't yanked back down on every
+     room poll. Signed by the last key rather than just the length: once chat
+     hits CHAT_KEEP, every new line pushes an old one out and the length never
+     moves again, so length alone would freeze the log right there. */
   renderChat(){
     const log=Room.on?Room.chat:[];
     const el=$("#chat-log");
-    if(!el || log.length===this._chatLogLen) return;
-    this._chatLogLen=log.length;
+    const sig=log.length+":"+(log.length?log[log.length-1].key:"");
+    if(!el || sig===this._chatLogSig) return;
+    this._chatLogSig=sig;
     el.innerHTML = log.length ? log.map(m=>
       '<div class="msg'+(m.n===CFG.name?" mine":"")+'"><div class="who">'+esc(m.n)+'</div><div class="txt">'+esc(m.m)+'</div></div>'
     ).join("") : '<p class="empty">'+esc(T("chat_empty"))+'</p>';
