@@ -1087,6 +1087,7 @@ const I18N = {
   g_timeleft:["TIME LEFT","남은 시간"],
   go_best:["NEW BEST!","신기록!"],
   go_menu:["BACK TO MENU","메뉴로 돌아가기"],
+  go_room:["BACK TO ROOM","방으로 돌아가기"],
   host_connect:["CONNECT","연결"],
   host_copy:["COPY CODE","코드 복사"],
   host_hint:["Send the code however you like. Nothing goes through a server.","코드는 아무 방법으로나 보내도 됩니다. 서버를 거치지 않습니다."],
@@ -3816,25 +3817,38 @@ const UI = {
     afterScreen(()=>{ G=null; FOES=[]; render(null); document.body.classList.remove("playing"); });
   },
 
-  /* game over — solo/sprint/speed only; versus keeps ticking for the room
-     and reports through renderRoom() instead (see gameOver() below). */
+  /* Versus shares this overlay with solo/sprint/speed rather than going
+     without one (see gameOver() below) — the room keeps ticking behind
+     it exactly as it does behind the pause menu, so showing it costs
+     nothing, and its button sends a versus run back to the room instead
+     of the main menu since there's a match to ready up for again rather
+     than a menu to return to. */
   showGameOver(beat){
     const g=G, secs=Math.max(0,((g.endedAt||now())-g.startedAt)/1000);
     const time=String(Math.floor(secs/60)).padStart(2,"0")+":"+(secs%60).toFixed(2).padStart(5,"0");
     $("#go-title").textContent = g.won ? T("g_clear") : T("g_over");
-    $("#go-best").hidden = !beat;
+    // A versus win bumps REC.wins every time, which would light this up on
+    // every single win rather than an actual personal best.
+    $("#go-best").hidden = !beat || g.mode==="versus";
     const rows = g.mode==="sprint"
       ? [[T("g_time"),time],[T("g_lines"),g.lines]]
       : g.mode==="speed"
       ? [[T("g_lines"),g.lines],[T("g_level"),g.level],[T("g_time"),time]]
+      : g.mode==="versus"
+      ? (g.attacks ? [[T("g_sent"),g.attackSent],[T("g_lines"),g.lines],[T("g_time"),time]]
+                   : [[T("g_score"),g.score.toLocaleString()],[T("g_lines"),g.lines],[T("g_time"),time]])
       : [[T("g_score"),g.score.toLocaleString()],[T("g_lines"),g.lines],[T("g_level"),g.level],[T("g_time"),time]];
     $("#go-stats").innerHTML = rows.map(([k,v])=>
       '<div class="rec"><span class="k">'+esc(k)+'</span><span class="v">'+esc(String(v))+'</span></div>').join("");
+    const menuKey = g.mode==="versus" ? "go_room" : "go_menu";
+    const menuBtn=$("#go-menu");
+    menuBtn.dataset.i18n=menuKey; menuBtn.textContent=T(menuKey);
     $("#game-over").classList.add("on");
   },
   hideGameOver(){ $("#game-over").classList.remove("on"); },
   backToMenuFromGameOver(){
     this.hideGameOver();
+    if(G && G.mode==="versus"){ this.showRoom(); return; }
     this.quitToMenu();
   },
 
@@ -4081,18 +4095,19 @@ const UI = {
 
   matchPending(){},
   tallied(won,tie,best){
-    noteRun(G,won,((G.endedAt||now())-G.startedAt)/1000);
+    const beat=noteRun(G,won,((G.endedAt||now())-G.startedAt)/1000);
     if(Net.mode==="room"){ if(won&&Room.on) Room.set("w",(Room.me()||{w:0}).w+1); }
     else if(won) WINS_P2P.me++;
     else if(!tie) WINS_P2P.peer++;
     if(won) Sfx.win();
     this.renderRoom();
+    this.showGameOver(beat);
   },
   gameOver(won){
     if(G.mode==="versus" && Net.mode!=="room"){ if(won) WINS_P2P.me++; else WINS_P2P.peer++; }
     const beat=noteRun(G,won,((G.endedAt||now())-G.startedAt)/1000);
-    if(G.mode==="versus") this.renderRoom();
-    else this.showGameOver(beat);
+    this.renderRoom();
+    this.showGameOver(beat);
   },
 
   /* settings */
