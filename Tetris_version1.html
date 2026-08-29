@@ -432,21 +432,33 @@ html[lang=ko] .fold summary h3{letter-spacing:.02em}
 }
 
 /* ---- versus room -------------------------------------------------------
-   The narrow left-aligned .card left most of a wide screen blank, so this
-   screen doesn't use the shared --col cap at all: .card splits into
-   room-main (leave, seats, rule picker, ready — in that order) on the
-   left and chat pinned on the right, always in the flow rather than
-   behind a FAB + popup. Below 760px they stack instead, chat second.
-   Seats are rows, a status list rather than navigation, so they keep an
-   at-rest border like the lobby's .room-row. */
-#v-room .card{width:100%;max-width:none;display:flex;flex-direction:column;gap:20px}
-.room-main{display:flex;flex-direction:column;gap:20px;width:100%}
-.room-leave{margin-bottom:0}
-.seat-list{display:grid;gap:8px;width:100%}
+   A dashboard of panels rather than a single list: players, match rules,
+   and chat each get their own bordered card under one status header
+   (leave + occupancy), so the room reads like a status board instead of
+   a form. This screen doesn't use the shared --col cap at all — the
+   panels want the width. Below 760px the panels stack in document order
+   (players, match, chat); at 760px and up they arrange into a grid with
+   players spanning the full height of the side column. Seats are a
+   status display, not navigation, so they keep an at-rest border like
+   the lobby's .room-row, and so does every other panel here. */
+#v-room .card{width:100%;max-width:none;display:flex;flex-direction:column;gap:16px}
+.dash-head{display:flex;align-items:center;gap:16px 24px;flex-wrap:wrap}
+.dash-head .hint{margin:0;flex:1 1 220px}
+.dash-grid{display:grid;gap:16px;grid-template-columns:1fr;min-height:0}
+.dash-panel{
+  display:flex;flex-direction:column;gap:14px;min-width:0;
+  border:1px solid var(--line);border-radius:var(--radius-sm,10px);
+  background:var(--surface);padding:18px;
+}
+.panel-label{
+  flex:0 0 auto;font-size:12px;font-weight:700;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--fg-faint);
+}
+.seat-grid{display:grid;gap:10px;grid-template-columns:1fr}
 .seat-row{
   display:flex;align-items:center;justify-content:space-between;gap:16px;
   border:1px solid var(--line);border-radius:var(--radius-sm,10px);
-  padding:13px 18px;background:var(--surface);
+  padding:13px 18px;background:var(--bg);
 }
 .seat-row.mine{border-color:var(--line-strong)}
 .seat-row.ready{border-color:#4fe0a8}
@@ -455,27 +467,21 @@ html[lang=ko] .fold summary h3{letter-spacing:.02em}
 .seat-row .w small{margin-left:6px;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--fg-faint);font-weight:600}
 .seat-row .nm{font-size:13.5px;font-weight:600;color:var(--fg-dim)}
 .seat-row.ready .nm{color:#4fe0a8}
-.rule-block{display:flex;flex-direction:column;align-items:flex-start;gap:6px}
-.rule-block .row{width:100%}
-.seat-col{display:flex;flex-direction:column;align-items:stretch;gap:14px;width:100%}
-.ready-row{width:auto;align-self:center;justify-content:center}
+.match-panel .row{width:100%}
+.ready-row{width:100%}
+.ready-row>.mi{flex:1 1 0}
 #b-ready,#b-spectate{text-align:center;border:1.5px solid var(--line-strong);padding-inline:.4em}
 #b-ready.ready{border-color:#4fe0a8;color:#4fe0a8}
 #b-spectate.on{border-color:var(--fg);color:var(--fg)}
 #b-ready.on::after,#b-ready:active::after,
 #b-spectate.on::after,#b-spectate:active::after{opacity:0}
 
-/* A messenger-style panel, always visible on the room's right edge —
-   no FAB, no modal to open. */
-.room-chat{
-  display:flex;flex-direction:column;overflow:hidden;min-height:260px;
-  border:1px solid var(--line);border-radius:var(--radius-sm,10px);
-  background:var(--surface);
-}
-.chat-head{
-  flex:0 0 auto;padding:14px 18px;border-bottom:1px solid var(--line);
-  font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--fg-faint);
-}
+/* Chat keeps the same "always visible, no FAB/modal" panel it always
+   had — just one dashboard card among the others now, so it drops the
+   padding the other panels get in favour of its own head/log/compose
+   sections meeting the card edge flush. */
+.room-chat{padding:0;overflow:hidden;min-height:260px}
+.room-chat .panel-label{padding:14px 18px;border-bottom:1px solid var(--line)}
 .chat-log{flex:1 1 auto;min-height:0;overflow-y:auto;padding:14px 18px;display:flex;flex-direction:column;gap:10px}
 .chat-log .empty{margin:auto;color:var(--fg-faint);font-size:13px}
 .chat-log .msg{max-width:80%}
@@ -494,13 +500,18 @@ html[lang=ko] .fold summary h3{letter-spacing:.02em}
 .chat-send:hover{color:var(--fg);border-color:var(--line-strong)}
 
 @media (min-width:760px){
-  #v-room .card{flex-direction:row;align-items:stretch;height:calc(100vh - env(safe-area-inset-top) - 32px)}
-  .room-main{width:min(50%,640px);justify-content:center;overflow-y:auto}
-  .room-chat{flex:1 1 auto;min-width:280px;max-height:60vh}
+  #v-room .card{height:calc(100vh - env(safe-area-inset-top) - 32px)}
+  .dash-grid{
+    flex:1 1 auto;min-height:0;
+    grid-template-columns:1.3fr 1fr;grid-template-rows:auto 1fr;
+    grid-template-areas:"seats match" "seats chat";
+  }
+  .seats-panel{grid-area:seats;overflow-y:auto}
+  .match-panel{grid-area:match}
+  .room-chat{grid-area:chat;min-height:0}
+  .seat-grid{grid-template-columns:1fr 1fr}
 }
 @media (max-width:759px){
-  .ready-row{width:100%}
-  .ready-row>.mi{flex:1 1 0}
   .room-chat{height:40vh}
 }
 
@@ -679,34 +690,40 @@ html[lang=ko] .fold summary h3{letter-spacing:.02em}
 
 <div class="veil" id="v-room">
   <div class="card">
-    <div class="room-main">
+    <div class="dash-head">
       <button class="mi nav ghost room-leave" id="b-leave" data-i18n="room_leave"></button>
-      <div class="seat-col">
-        <div class="seat-list" id="seatlist"></div>
-        <p class="hint" id="room-hint" data-i18n="room_hint"></p>
-      </div>
-      <div class="rule-block">
+      <p class="hint" id="room-hint" data-i18n="room_hint"></p>
+    </div>
+
+    <div class="dash-grid">
+      <section class="dash-panel seats-panel">
+        <div class="panel-label" data-i18n="room_players"></div>
+        <div class="seat-grid" id="seatlist"></div>
+      </section>
+
+      <section class="dash-panel match-panel">
+        <div class="panel-label" data-i18n="room_match"></div>
         <div class="row" id="rulerow">
           <button class="mi ctr rule" type="button" data-rule="attack" data-i18n="rule_attack"></button>
           <button class="mi ctr rule" type="button" data-rule="score" data-i18n="rule_score"></button>
         </div>
         <p class="hint" id="rule-hint"></p>
-      </div>
-      <div class="row ready-row" id="readyrow">
-        <button class="mi nav ready" id="b-ready" data-i18n="room_ready"></button>
-        <button class="mi nav spectate" id="b-spectate" data-i18n="room_spectate"></button>
-      </div>
-    </div>
+        <div class="row ready-row" id="readyrow">
+          <button class="mi nav ready" id="b-ready" data-i18n="room_ready"></button>
+          <button class="mi nav spectate" id="b-spectate" data-i18n="room_spectate"></button>
+        </div>
+      </section>
 
-    <div class="room-chat">
-      <div class="chat-head"><span data-i18n="chat_t"></span></div>
-      <div class="chat-log" id="chat-log"></div>
-      <form class="chat-compose" id="chatbar">
-        <input class="tf" id="chat-in" maxlength="120" autocomplete="off" data-i18n-ph="ph_chat">
-        <button class="chat-send" id="chat-send" type="submit" data-i18n-aria="chat_send">
-          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3.4 20.4 21 12 3.4 3.6 3.4 10.2 15 12 3.4 13.8Z"/></svg>
-        </button>
-      </form>
+      <section class="dash-panel room-chat">
+        <div class="panel-label"><span data-i18n="chat_t"></span></div>
+        <div class="chat-log" id="chat-log"></div>
+        <form class="chat-compose" id="chatbar">
+          <input class="tf" id="chat-in" maxlength="120" autocomplete="off" data-i18n-ph="ph_chat">
+          <button class="chat-send" id="chat-send" type="submit" data-i18n-aria="chat_send">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3.4 20.4 21 12 3.4 3.6 3.4 10.2 15 12 3.4 13.8Z"/></svg>
+          </button>
+        </form>
+      </section>
     </div>
   </div>
 </div>
@@ -1123,6 +1140,8 @@ const I18N = {
   room_hint:["The match starts as soon as you are both ready.","두 사람이 모두 준비하면 바로 시작합니다."],
   room_hint_n:["{n} in the room. Everyone readies up, then it starts. Up to four.","방에 {n}명. 모두 준비하면 시작합니다. 최대 4명."],
   room_leave:["LEAVE","나가기"],
+  room_match:["MATCH","대전 설정"],
+  room_players:["PLAYERS","플레이어"],
   room_ready:["READY","준비 완료"],
   room_spectate:["SPECTATE","관전하기"],
   room_spectating:["SPECTATING","관전 중"],
