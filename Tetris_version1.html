@@ -2084,7 +2084,7 @@ const TIE_SETTLE=700, TIE_CAP=2000;
 // every client sorts the same published durations, so all of them name the same winner
 function resolveRound(){
  if(!G||G.mode!=="versus"||!G.attacks||G.resolved||G.spectating||G.stranded) return;
- const room = Net.mode==="room" && RoomClient.on;
+ const room = RoomClient.on;
  const rv = room ? RoomClient.view() : null;
  if(!G.over){
   if(!room || !rv.roster || Object.keys(rv.roster).length<2) return;
@@ -2210,7 +2210,7 @@ function loop(t){
  Pad.poll();
  if(G && G.mode==="versus" && Net.ready()){
   sendAcc+=dt;
-  if(sendAcc>=(Net.mode==="room"?ROOM_MS:80)){
+  if(sendAcc>=(RoomClient.on?ROOM_MS:80)){
    sendAcc=0;
    Net.send({t:"b",d:G.snapshot(),s:G.attackSent,p:G.score,o:G.over});
   }
@@ -2226,7 +2226,7 @@ function drainEvents(){
    case "drop": FX.thud(); break;
    case "attack":
     if(G.mode==="versus" && Net.ready()){
-     if(Net.mode==="room"){
+     if(RoomClient.on){
       const live=RoomClient.view().alive.filter(s=>s.pid!==PID);
       if(live.length){
        const t=live[rnd(live.length)];
@@ -2241,7 +2241,7 @@ function drainEvents(){
     break;
    case "dead":
     // awaited with retry inside: a dropped death left the round with no winner
-    if(Net.mode==="room"){ RoomClient.publishDeath(G.lasted()).catch(()=>{}); }
+    if(RoomClient.on){ RoomClient.publishDeath(G.lasted()).catch(()=>{}); }
     else if(Net.ready()) Net.send({t:"d", ms:G.lasted()});
     if(G.rule==="score") UI.matchPending();
     else if(G.mode==="versus" && !G.spectating && !G.stranded){ G.pending=true; G.pendingAt=now(); }
@@ -2749,7 +2749,7 @@ const Net = {
  pc:null, dc:null, role:null, peerName:"", state:"idle",
  stats:{host:0,srflx:0,ice:"new",conn:"new"},
  watchdog:null, offerCode:"", mode:"p2p", lastB:"",
- ready(){ return this.mode==="room" ? RoomClient.on : !!(this.dc && this.dc.readyState==="open"); },
+ ready(){ return RoomClient.on || !!(this.dc && this.dc.readyState==="open"); },
  setState(s){ this.state=s; UI.netStatus(); },
  resetStats(){ this.stats={host:0,srflx:0,ice:"new",conn:"new"}; UI.diag(); },
  reset(){
@@ -2818,10 +2818,10 @@ const Net = {
    const key=JSON.stringify(b);
    if(key===this.lastB) return;
    this.lastB=key;
-   if(this.mode==="room"){ RoomClient.publishBoard(b).catch(()=>{}); return; }
+   if(RoomClient.on){ RoomClient.publishBoard(b).catch(()=>{}); return; }
    obj=Object.assign({t:"b"},b);
   }
-  if(this.mode==="room") return;
+  if(RoomClient.on) return;
   try{ this.dc.send(JSON.stringify(obj)); }catch(e){}
  },
  onMsg(m){
@@ -3219,7 +3219,7 @@ const UI = {
   // well used to run noteRun a second time and double-count the win
   this._goneFor=G;
   const beat=noteRun(G,won,((G.endedAt||now())-G.startedAt)/1000);
-  if(Net.mode==="room"){ if(won) RoomClient.bumpWin().catch(()=>{}); }
+  if(RoomClient.on){ if(won) RoomClient.bumpWin().catch(()=>{}); }
   else if(won) WINS_P2P.me++;
   else if(!tie) WINS_P2P.peer++;
   if(won) Sfx.win();
