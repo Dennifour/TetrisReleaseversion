@@ -494,10 +494,6 @@ html[lang=ko] .fold summary h3{letter-spacing:.02em}
     </section>
     <section class="panel" data-panel="audio" role="tabpanel" id="panel-audio">
      <h3 data-i18n="set_sound"></h3>
-     <div class="opts">
-      <div class="sp"><span data-i18n="set_snd"></span><button type="button" role="switch" aria-checked="false" class="sw on" id="s-snd"></button></div>
-      <div class="sp rng"><span><span data-i18n="set_vol"></span><small id="l-vol"></small></span><input type="range" data-i18n-aria="set_vol" id="s-vol" min="0" max="100" step="5"></div>
-     </div>
      <p class="hint" data-i18n="set_sound_hint"></p>
     </section>
     <section class="panel" data-panel="controls" role="tabpanel" id="panel-controls">
@@ -861,9 +857,8 @@ const I18N = {
  set_sdf:["SDF — soft drop speed","SDF — 소프트 드롭 속도"],
  set_sig:["Signaling","시그널링"],
  set_sig_hint:["Firebase Realtime Database URL. It carries the room list and the match itself, so you can play on networks that block a direct link. Swapping codes by hand never touches it.","Firebase 실시간 데이터베이스 주소. 방 목록과 경기 자체를 전달하므로 직접 연결이 막힌 네트워크에서도 플레이할 수 있습니다. 코드를 직접 주고받는 방식은 이 주소를 사용하지 않습니다."],
- set_snd:["Sound effects","효과음"],
  set_sound:["Sound","소리"],
- set_sound_hint:["Every sound is generated as it plays — there are no audio files to load.","모든 소리는 재생 시점에 직접 합성됩니다. 불러오는 음원 파일이 없습니다."],
+ set_sound_hint:["To be updated.","추후 업데이트 예정입니다."],
  set_swap:["D-pad on the right","방향키를 오른쪽에"],
  set_swap_s:["Swaps the D-pad and the A/B buttons.","방향키와 A/B 버튼의 위치를 바꿉니다."],
  set_swdrop:["Drag to drop one row","한 줄 드롭 거리"],
@@ -880,7 +875,6 @@ const I18N = {
  set_tile_upload:["upload","업로드"],
  set_tiles:["Tetromino tiles","테트로미노 타일"],
  set_tiles_hint:["Upload a square image per piece to use in place of its colour.","조각마다 정사각형 이미지를 올리면 색 대신 타일로 사용됩니다."],
- set_vol:["Volume","음량"],
  sp_easy:["EASY","쉬움"],
  sp_hard:["HARD","어려움"],
  sp_hint:["The bar under the well is the time you have left. Clearing any line fills it again; letting it empty ends the run. Gravity still climbs a level every ten lines.","보드 아래 막대가 남은 시간입니다. 줄을 지우면 다시 채워지고, 모두 비면 게임이 끝납니다. 10줄마다 레벨이 올라가는 것은 그대로입니다."],
@@ -935,66 +929,6 @@ function applyLang(){
  if(typeof repaintSettings==="function") repaintSettings();
  if(typeof tileNote==="function") tileNote();   // re-render in the new language
 }
-const Sfx = (()=>{
- let ac=null, master=null, gen=0;
- // a clear or a K.O. schedules its notes ahead; quitting the run cancels them
- const later=(fn,ms)=>{ const g=gen; setTimeout(()=>{ if(g===gen) fn(); },ms); };
- const level = () => .20*clamp(CFG.vol,0,100)/100;
- function ctx(){
-  if(!ac){
-   ac = new (window.AudioContext||window.webkitAudioContext)();
-   master = ac.createGain(); master.gain.value=level(); master.connect(ac.destination);
-  }
-  if(ac.state==="suspended") ac.resume();
-  return ac;
- }
- function blip(freq,dur=.07,type="square",vol=1,slide=0){
-  if(!CFG.snd) return;
-  try{
-   const c=ctx(), t=c.currentTime;
-   const o=c.createOscillator(), g=c.createGain();
-   o.type=type; o.frequency.setValueAtTime(freq,t);
-   if(slide) o.frequency.exponentialRampToValueAtTime(Math.max(40,freq+slide),t+dur);
-   g.gain.setValueAtTime(0,t);
-   g.gain.linearRampToValueAtTime(.9*vol,t+.006);
-   g.gain.exponentialRampToValueAtTime(.0008,t+dur);
-   o.connect(g); g.connect(master); o.start(t); o.stop(t+dur+.02);
-  }catch(e){}
- }
- function noise(dur=.2,vol=.5){
-  if(!CFG.snd) return;
-  try{
-   const c=ctx(), n=Math.floor(c.sampleRate*dur);
-   const buf=c.createBuffer(1,n,c.sampleRate), d=buf.getChannelData(0);
-   for(let i=0;i<n;i++) d[i]=(Math.random()*2-1)*Math.pow(1-i/n,2.2);
-   const s=c.createBufferSource(); s.buffer=buf;
-   const f=c.createBiquadFilter(); f.type="bandpass"; f.frequency.value=1400; f.Q.value=.8;
-   const g=c.createGain(); g.gain.value=vol;
-   s.connect(f); f.connect(g); g.connect(master); s.start();
-  }catch(e){}
- }
- return {
-  unlock(){ try{ctx();}catch(e){} },
-  hush(){ gen++; },
-  setVol(){ if(master) master.gain.value=level(); },
-  move(){ blip(300,.035,"square",.28); },
-  rotate(){ blip(460,.045,"square",.32); },
-  lock(){ blip(150,.07,"triangle",.5,-60); },
-  hold(){ blip(620,.07,"sine",.4,140); },
-  clear(n){
-   const base=[0,523,587,659,784][n]||523;
-   [0,1,2].forEach((i)=>later(()=>blip(base*Math.pow(1.26,i),.14,"sine",.42+n*.06),i*38));
-   if(n>=4) noise(.3,.4);
-  },
-  tspin(){ [0,1,2,3].forEach(i=>later(()=>blip(392*Math.pow(1.19,i),.11,"sawtooth",.3),i*45)); },
-  garbage(){ noise(.22,.5); blip(90,.16,"square",.35,-30); },
-  ko(){ [0,1,2,3,4].forEach(i=>later(()=>blip(880/Math.pow(1.22,i),.18,"sawtooth",.4),i*60)); },
-  win(){ [523,659,784,1046].forEach((f,i)=>later(()=>blip(f,.24,"sine",.5),i*110)); },
-  count(){ blip(440,.09,"sine",.3); },
-  go(){ blip(880,.18,"sine",.45,140); },
-  ui(){ blip(700,.03,"sine",.22); }
- };
-})();
 const SHAPES = {
  I:["....","IIII","....","...."],
  J:["J..","JJJ","..."],  L:["..L","LLL","..."],  O:["OO","OO"],
@@ -1250,9 +1184,8 @@ class Game {
   const n=rows.length;
   if(n===0){
    this.combo=-1;
-   if(spin){ this.events.push({e:"text",text:EN(spin==="mini"?"b_mini":"b_tspin"),kind:"spin"}); Sfx.tspin(); }
+   if(spin){ this.events.push({e:"text",text:EN(spin==="mini"?"b_mini":"b_tspin"),kind:"spin"}); ; }
    this.events.push({e:"locked"});
-   Sfx.lock();
    this.applyGarbage();
    this.spawn();
    return;
@@ -1286,7 +1219,6 @@ class Game {
   if(this.combo>0) this.events.push({e:"text",text:EN("b_combo",{n:this.combo}),kind:"combo"});
   if(n===4) this.stats.quad++;
   if(spin) this.stats.tspin++;
-  Sfx.clear(n);
   let out=atk;
   while(out>0 && this.pendingGarbage.length){
    const g=this.pendingGarbage[0];
@@ -1335,14 +1267,13 @@ class Game {
    this.board.shift();
    this.board.push(row);
   }
-  Sfx.garbage();
   this.events.push({e:"garbage",lines:total});
  }
- die(){ if(this.over) return; this.over=true; this.clearing=null; this.endedAt=now(); this.events.push({e:"dead"}); Sfx.ko(); }
- win(){ if(this.over) return; this.over=true; this.won=true; this.clearing=null; this.endedAt=now(); this.events.push({e:"win"}); Sfx.win(); }
+ die(){ if(this.over) return; this.over=true; this.clearing=null; this.endedAt=now(); this.events.push({e:"dead"}); ; }
+ win(){ if(this.over) return; this.over=true; this.won=true; this.clearing=null; this.endedAt=now(); this.events.push({e:"win"}); ; }
  // a duration measured on one machine, so it compares without sharing a clock
  lasted(){ return Math.max(0, Math.round((this.endedAt||now())-this.startedAt)); }
- outlasted(){ if(this.won) return; this.won=true; Sfx.win(); }
+ outlasted(){ if(this.won) return; this.won=true; ; }
  tick(dt, input){
   if(this.over||this.paused) return;
   if(this.clock){
@@ -1870,7 +1801,6 @@ const Input = {
  held:{left:false,right:false,softDrop:false},
  dir:0, dasTimer:0, arrTimer:0, soft:false,
  press(k){
-  Sfx.unlock();
   if(!G || G.over) { if(k==="pause") UI.togglePause(); return; }
   if(COUNT>0 || startHoldEnd) { if(k==="pause") UI.togglePause(); return; }
   // soft drop used to latch its flag here, so resuming ran with fast gravity
@@ -1883,10 +1813,10 @@ const Input = {
     if(!G.paused) G.softDrop();
     break;
    case "hardDrop": if(!G.paused){ G.hardDrop(); } break;
-   case "rotR": if(!G.paused && G.rotate(1))  Sfx.rotate(); break;
-   case "rotL": if(!G.paused && G.rotate(-1)) Sfx.rotate(); break;
-   case "rot180": if(!G.paused && G.rotate180()) Sfx.rotate(); break;
-   case "hold": if(!G.paused && G.holdPiece()) Sfx.hold(); break;
+   case "rotR": if(!G.paused) G.rotate(1); break;
+   case "rotL": if(!G.paused) G.rotate(-1); break;
+   case "rot180": if(!G.paused) G.rotate180(); break;
+   case "hold": if(!G.paused) G.holdPiece(); break;
    case "pause": UI.togglePause(); break;
   }
  },
@@ -1900,15 +1830,14 @@ const Input = {
  setDir(d){
   if(d===this.dir) return;
   this.dir=d; this.dasTimer=0; this.arrTimer=0;
-  if(d!==0 && G && !G.paused && !G.over){ if(G.move(d,0)) Sfx.move(); }
+  if(d!==0 && G && !G.paused && !G.over) G.move(d,0);
  },
  tick(dt){
   if(!G||G.paused||G.over||this.dir===0) return;
   this.dasTimer+=dt;
   if(this.dasTimer<CFG.das) return;
   if(CFG.arr<=0){
-   let moved=false; while(G.move(this.dir,0)) moved=true;
-   if(moved) Sfx.move();
+   while(G.move(this.dir,0));
    return;
   }
   this.arrTimer+=dt;
@@ -2213,7 +2142,7 @@ function startMatch(){
 let rafId=0, lastT=0, sendAcc=0;
 function startGame(mode){
  clearTimeout(boardDrop); boardDrop=0;   // a fade still pending would null this new well
- Sfx.hush();                             // and notes queued by the last run must not play over this one
+ ;                             // and notes queued by the last run must not play over this one
  UI.hideGameOver(); UI.closePauseMenu();
  G=new Game(mode);
  COUNT=3; countEnd=now()+3000; startHoldEnd=0;
@@ -2234,11 +2163,9 @@ function loop(t){
   if(COUNT>0 && !G.over){
    if(G.paused) countEnd=now()+COUNT*1000;
    else{
-    const was=Math.ceil(COUNT);
     COUNT=Math.max(0,(countEnd-now())/1000);
-    G.startedAt=now();
-    if(COUNT<=0){ Sfx.go(); startHoldEnd=now()+START_TXT_MS; }
-    else if(Math.ceil(COUNT)!==was) Sfx.count();
+    G.startedAt=now();                    // held at now so lasted() measures play, not the wait
+    if(COUNT<=0) startHoldEnd=now()+START_TXT_MS;
    }
   }else if(startHoldEnd && !G.over){
    if(G.paused) startHoldEnd+=dt;
@@ -2963,7 +2890,6 @@ const BOARD_FADE_MS=320;
 // otherwise quitting and restarting inside the fade blanked the NEW run
 let boardDrop=0;
 function dropBoard(){
- Sfx.hush();
  if(G){ G.resolved=true; G.pending=false; }
  const doomed=G;
  clearTimeout(boardDrop);
@@ -3099,7 +3025,6 @@ const UI = {
   }catch(e){ this.err("#srv-hint",e.message,true); }
  },
  async doMakeRoom(){
-  Sfx.ui();
   Net.reset();
   clearInterval(this._rooms);
   // mode flips only once the room is actually up: a failed open used to
@@ -3108,7 +3033,6 @@ const UI = {
   catch(e){ this.err("#srv-hint",e.message,true); }
  },
  async doJoinRoom(id){
-  Sfx.ui();
   Net.reset();
   try{ await RoomClient.join(id); Net.mode="room"; Net.role="guest"; Net.setState("connected"); this.showRoom(); }
   catch(e){ this.err("#srv-hint",e.message,true); this.refreshRooms(); }
@@ -3153,7 +3077,6 @@ const UI = {
     document.body.removeChild(tmp);
    }catch(e){ ok=false; }
   }
-  Sfx.ui();
   if(hintSel){
    if(ok) this.ok(hintSel,T("copied"));
    else{ this.err(hintSel,T("copyfail")); t.focus(); t.setSelectionRange(0,t.value.length); }
@@ -3193,7 +3116,7 @@ const UI = {
   Net.setState("failed");
   this.diag();
  },
- peerJoined(){ if(G && G.mode==="versus" && !G.over) return; Sfx.win(); this.showRoom(); },
+ peerJoined(){ if(G && G.mode==="versus" && !G.over) return; ; this.showRoom(); },
  showRoom(){ this.renderRoom(); this.show("#v-room"); },
  isHost(){ return RoomClient.on ? RoomClient.isHost() : Net.role==="host"; },
  setRule(r){
@@ -3272,7 +3195,6 @@ const UI = {
   if(RoomClient.on){ if(won) RoomClient.bumpWin().catch(()=>{}); }
   else if(won) WINS_P2P.me++;
   else if(!tie) WINS_P2P.peer++;
-  if(won) Sfx.win();
   this.renderRoom();
   this.showGameOver(beat);
  },
@@ -3306,12 +3228,11 @@ const UI = {
 function splitSelect(splitId,itemSel,groupAttr){
  const root=$(splitId);
  root.querySelectorAll(itemSel).forEach(b=>b.addEventListener("click",()=>{
-  Sfx.ui();
   root.querySelectorAll(itemSel).forEach(o=>o.classList.toggle("on",o===b));
   root.querySelectorAll(".panel-area>[data-panel]").forEach(p=>p.classList.toggle("on",p.dataset.panel===b.dataset[groupAttr]));
   root.classList.add("panel-open");
  }));
- root.querySelector(".panel-back")?.addEventListener("click",()=>{ Sfx.ui(); root.classList.remove("panel-open"); });
+ root.querySelector(".panel-back")?.addEventListener("click",()=>{ ; root.classList.remove("panel-open"); });
 }
 splitSelect("#lobby-split","[data-panel]","panel");
 function applyControlSide(){ document.body.classList.toggle("swap",!!CFG.swap); }
@@ -3401,7 +3322,7 @@ document.addEventListener("pointerdown",e=>{
  el._lit=setTimeout(()=>el.classList.remove("lit"),500);
 },true);
 $$("[data-go]").forEach(b=>b.onclick=()=>{
- Sfx.unlock(); Sfx.ui();
+ ; ;
  const go=b.dataset.go;
  if(go==="solo"||go==="sprint"){ UI.closeAll(); afterScreen(()=>startGame(go)); }
  else if(go==="play") UI.show("#v-play");
@@ -3412,9 +3333,9 @@ $$("[data-go]").forEach(b=>b.onclick=()=>{
  else if(go==="host") UI.doHost();
  else if(go==="join") UI.show("#v-join");
 });
-$$("[data-back]").forEach(b=>b.onclick=()=>{ Sfx.ui(); UI.back("#"+b.closest(".veil").id); });
+$$("[data-back]").forEach(b=>b.onclick=()=>{ ; UI.back("#"+b.closest(".veil").id); });
 $$("[data-speed]").forEach(b=>b.onclick=()=>{
- Sfx.unlock(); Sfx.ui();
+ ; ;
  CFG.speedDiff=b.dataset.speed; saveCfg();
  UI.closeAll();
  afterScreen(()=>startGame("speed"));
@@ -3428,27 +3349,24 @@ $("#h-in").addEventListener("paste",()=>setTimeout(()=>UI.doAccept(),60));
 $("#j-in").addEventListener("paste",()=>setTimeout(()=>UI.doAnswer(),60));
 const mySeat=()=>RoomClient.on?(RoomClient.view().seats.find(s=>s.pid===PID)||null):null;
 $("#b-ready").onclick=()=>{
- Sfx.ui();
  const m=mySeat();
  UI.setReady(!(RoomClient.on?!!(m&&m.rdy):READY_P2P.me));
 };
 $("#b-spectate").onclick=()=>{
- Sfx.ui();
  const m=mySeat();
  UI.setSpectating(!(m&&m.spec));
 };
-$$(".rule").forEach(b=>b.onclick=()=>{ Sfx.ui(); UI.setRule(b.dataset.rule); });
-$("#b-leave").onclick=()=>{ Sfx.ui(); UI.leaveRoom(); };
-$("#p-resume").onclick=()=>{ Sfx.ui(); UI.closePauseMenu(); };
-$("#p-restart").onclick=()=>{ Sfx.ui(); UI.restartFromPause(); };
-$("#p-quit").onclick=()=>{ Sfx.ui(); UI.quitToMenu(); };
-$("#go-menu").onclick=()=>{ Sfx.ui(); UI.backToMenuFromGameOver(); };
+$$(".rule").forEach(b=>b.onclick=()=>{ ; UI.setRule(b.dataset.rule); });
+$("#b-leave").onclick=()=>{ ; UI.leaveRoom(); };
+$("#p-resume").onclick=()=>{ ; UI.closePauseMenu(); };
+$("#p-restart").onclick=()=>{ ; UI.restartFromPause(); };
+$("#p-quit").onclick=()=>{ ; UI.quitToMenu(); };
+$("#go-menu").onclick=()=>{ ; UI.backToMenuFromGameOver(); };
 $("#chatbar").addEventListener("submit",e=>{
  e.preventDefault();
  const el=$("#chat-in"), t=el.value;
  if(!t.trim()||!RoomClient.on) return;      // keep the text if it cannot be sent
  el.value="";
- Sfx.ui();
  // a rejected chat write used to vanish without a trace, which hid a
  // database rule that denied /chat for as long as it was wrong
  RoomClient.say(t).catch(err=>{ el.value=t; UI.err("#room-hint",err.message,true); });
@@ -3465,7 +3383,6 @@ function bindRange(id,key,label,fmt,after,scale){
 bindRange("#s-das","das","#l-das",v=>T("u_ms",{v}));
 bindRange("#s-arr","arr","#l-arr",v=>v===0?T("u_instant"):T("u_ms",{v}));
 bindRange("#s-sdf","sdf","#l-sdf",v=>T("u_cps",{v}));
-bindRange("#s-vol","vol","#l-vol",v=>v+"%",()=>Sfx.setVol());
 bindRange("#s-btn","btnScale","#l-btn",v=>{
  const {W,H}=viewportBox();
  return Math.round(v*100)+"% · "+solve(W,H,v,CFG.btnY,CFG.btnX,CFG.touch!=="dpad").ctl+"px";
@@ -3476,7 +3393,6 @@ bindRange("#s-btx","btnX","#l-btx",
  v=>v===0?T("pv_default"):(v>0?T("pv_out"):T("pv_in"))+" "+Math.abs(v)+"%",layout);
 bindRange("#s-boardsize","boardScale","#l-boardsize",v=>Math.round(v*100)+"%",layout,100);
 $("#b-ctlreset").onclick=()=>{
- Sfx.ui();
  CFG.btnScale=1; CFG.btnY=0; CFG.btnX=0; CFG.swap=false;
  saveCfg();
  $("#s-swap").classList.remove("on");
@@ -3487,11 +3403,10 @@ $("#b-ctlreset").onclick=()=>{
 function repaintSettings(){ rangePainters.forEach(p=>p()); }
 let TAB="general";
 $$("#set-rail [data-tab]").forEach(b=>b.onclick=()=>{
- Sfx.ui();
  UI.openTab(b.dataset.tab);
  $("#set-split").classList.add("panel-open");
 });
-$("#set-panelback").onclick=()=>{ Sfx.ui(); $("#set-split").classList.remove("panel-open"); };
+$("#set-panelback").onclick=()=>{ ; $("#set-split").classList.remove("panel-open"); };
 const REDUCED = matchMedia("(prefers-reduced-motion:reduce)");
 const FOLD_MS = 300;
 const FOLDS = $$(".fold").map(d=>{
@@ -3529,7 +3444,6 @@ const FOLDS = $$(".fold").map(d=>{
 FOLDS.forEach(f=>{
  f.el.querySelector("summary").addEventListener("click",e=>{
   e.preventDefault();
-  Sfx.ui();
   if(f.el._busy) return;
   if(f.el.open){ f.close(); return; }
   FOLDS.forEach(o=>{ if(o!==f) o.close(); });
@@ -3583,7 +3497,6 @@ function bindRows(host,which){
  });
 }
 $$(".tmode").forEach(b=>b.onclick=()=>{
- Sfx.ui();
  CFG.touch=b.dataset.touch; CFG.touchSet=true; saveCfg();
  applyTouchMode(); paintTouch();
 });
@@ -3595,7 +3508,7 @@ function paintTouch(){
  $("#touch-hint").textContent=T(dpad?"set_dpad_s":swipe?"set_swipe_s":"set_off_s");
 }
 $("#s-padon").onclick=()=>{
- CFG.padOn=!CFG.padOn; saveCfg(); Sfx.ui();
+ CFG.padOn=!CFG.padOn; saveCfg(); ;
  $("#s-padon").classList.toggle("on",CFG.padOn);
  $("#s-padon").setAttribute("aria-checked",CFG.padOn);
 };
@@ -3606,20 +3519,19 @@ bindRange("#s-swdrop","swDrop","#l-swdrop",v=>T("u_swipepx",{v,px:Math.round(SWI
 bindRange("#s-swflick","swFlick","#l-swflick",
  v=>T("u_flick",{v:(v/100).toFixed(2)+" px/ms", n:T(v<=80?"f_gentle":v<=150?"f_normal":"f_firm")}));
 $("#b-swreset").onclick=()=>{
- Sfx.ui();
  CFG.swMove=80; CFG.swDrop=70; CFG.swFlick=110;
  saveCfg(); repaintSettings();
 };
-$("#b-keyreset").onclick=()=>{ Sfx.ui(); CFG.keys=fillBinds(null,KEYS_DEFAULT); saveCfg(); bindRows("#keylist","keys"); };
-$("#b-padreset").onclick=()=>{ Sfx.ui(); CFG.pads=fillBinds(null,PADS_DEFAULT); saveCfg(); bindRows("#padlist","pads"); };
+$("#b-keyreset").onclick=()=>{ ; CFG.keys=fillBinds(null,KEYS_DEFAULT); saveCfg(); bindRows("#keylist","keys"); };
+$("#b-padreset").onclick=()=>{ ; CFG.pads=fillBinds(null,PADS_DEFAULT); saveCfg(); bindRows("#padlist","pads"); };
 $$(".lang").forEach(b=>{
  b.onclick=()=>{
   if(CFG.lang===b.dataset.lang) return;
-  CFG.lang=b.dataset.lang; saveCfg(); Sfx.ui();
+  CFG.lang=b.dataset.lang; saveCfg(); ;
   applyLang();
  };
 });
-[["#s-snd","snd"],["#s-bob","bob"],["#s-ghost","ghost"],
+[["#s-bob","bob"],["#s-ghost","ghost"],
  ["#s-grid","grid"],["#s-swap","swap"]].forEach(([id,key])=>{
  const el=$(id);
  el.classList.toggle("on",!!CFG[key]);
@@ -3628,7 +3540,7 @@ $$(".lang").forEach(b=>{
   CFG[key]=!CFG[key];
   el.classList.toggle("on",CFG[key]);
   el.setAttribute("aria-checked",CFG[key]);
-  saveCfg(); Sfx.ui();
+  saveCfg(); ;
   if(key==="swap"){ applyControlSide(); layout(); }
  };
 });
@@ -3659,7 +3571,6 @@ $("#tile-rows").innerHTML=TYPES.map(t=>`
  </div>`).join("")
  +'<div class="sp full"><button type="button" class="mi ghost" id="tile-clear" data-i18n="set_tile_clearall"></button><small id="tile-note"></small></div>';
 $("#tile-clear").onclick=()=>{
- Sfx.ui();
  TYPES.forEach(t=>{ delete CFG.tiles[t]; loadTile(t,null); });
  store.set("tiles",CFG.tiles);
  TYPES.forEach(paintTileRow); paintTileClear(); tileNote("");
@@ -3667,7 +3578,7 @@ $("#tile-clear").onclick=()=>{
 function paintTileClear(){ const b=$("#tile-clear"); if(b) b.hidden=!TYPES.some(t=>CFG.tiles[t]); }
 TYPES.forEach(t=>{
  paintTileRow(t);
- $("#tu-"+t).onclick=()=>{ Sfx.ui(); $("#tf-"+t).click(); };
+ $("#tu-"+t).onclick=()=>{ ; $("#tf-"+t).click(); };
  $("#tf-"+t).onchange=e=>{
   const file=e.target.files[0];
   e.target.value="";
@@ -3698,7 +3609,7 @@ TYPES.forEach(t=>{
     const was=CFG.tiles[t];
     CFG.tiles[t]=url;
     if(store.set("tiles",CFG.tiles)){
-     loadTile(t,url); paintTileRow(t); tileNote(""); Sfx.ui();
+     loadTile(t,url); paintTileRow(t); tileNote(""); ;
     }else{
      // storage is full: say so rather than leaving the row unchanged
      if(was===undefined) delete CFG.tiles[t]; else CFG.tiles[t]=was;
@@ -3710,7 +3621,6 @@ TYPES.forEach(t=>{
   reader.readAsDataURL(file);
  };
  $("#tr-"+t).onclick=()=>{
-  Sfx.ui();
   delete CFG.tiles[t];
   store.set("tiles",CFG.tiles);
   loadTile(t,null);
@@ -3837,7 +3747,7 @@ const fsCan=!!(document.documentElement.requestFullscreen||document.documentElem
 function enterFs(){ try{ (document.documentElement.requestFullscreen||document.documentElement.webkitRequestFullscreen).call(document.documentElement); }catch(_){} }
 if(fsCan){
  $("#fsbtn").hidden=false;
- $("#fsbtn").addEventListener("click",()=>{ Sfx.ui(); enterFs(); });
+ $("#fsbtn").addEventListener("click",()=>{ ; enterFs(); });
  const syncFs=()=>{
   $("#fsbtn").hidden=!!fsEl();
   layout();
