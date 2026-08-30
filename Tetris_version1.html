@@ -479,6 +479,13 @@ html[lang=ko] .fold summary h3{letter-spacing:.02em}
      <h3 data-i18n="set_id"></h3>
      <input class="tf box" id="s-name" maxlength="12" data-i18n-ph="ph_name">
      <p class="hint" data-i18n="set_id_hint"></p>
+     <h3 data-i18n="set_data"></h3>
+     <div class="row">
+      <button class="mi ctr" type="button" id="b-export" data-i18n="set_export"></button>
+      <button class="mi ctr" type="button" id="b-import" data-i18n="set_import"></button>
+     </div>
+     <input type="file" id="s-import" accept="application/json,.json" hidden>
+     <p class="hint" id="data-hint" data-i18n="set_data_hint"></p>
     </section>
     <section class="panel" data-panel="video" role="tabpanel" id="panel-video">
      <h3 data-i18n="set_pres"></h3>
@@ -491,6 +498,9 @@ html[lang=ko] .fold summary h3{letter-spacing:.02em}
      <h3 data-i18n="set_tiles"></h3>
      <p class="hint" data-i18n="set_tiles_hint"></p>
      <div class="opts tiles" id="tile-rows"></div>
+     <h3 data-i18n="set_presets"></h3>
+     <p class="hint" data-i18n="set_presets_hint"></p>
+     <div class="opts" id="preset-rows"></div>
     </section>
     <section class="panel" data-panel="audio" role="tabpanel" id="panel-audio">
      <h3 data-i18n="set_sound"></h3>
@@ -600,6 +610,7 @@ const CFG = {
  btnX:  store.get("btnX",0),
  fbUrl: store.get("fbUrl",""),
  tiles: store.get("tiles",null) || {},
+ presets: store.get("presets",null) || [],
  touch: store.get("touch", isCoarse()?"swipe":"off"),
  touchSet: store.get("touchSet",false),
  swMove: store.get("swMove",80),
@@ -647,6 +658,30 @@ const REC = {
 const saveRec = () => {
  store.set("recMarathon",REC.marathon); store.set("recSprint",REC.sprint);
  store.set("recWins",REC.wins); store.set("recSpeed",REC.speed);
+};
+const SAVE_VERSION=1;
+const Backup = {
+ make(){ return {v:SAVE_VERSION, at:new Date().toISOString(), cfg:CFG, rec:REC}; },
+ // validated whole before anything is written: a half-applied import would
+ // leave settings and records disagreeing with each other
+ check(text){
+  let d;
+  try{ d=JSON.parse(text); }catch(e){ throw new Error(T("e_badfile")); }
+  if(!d||typeof d!=="object"||!d.cfg||typeof d.cfg!=="object") throw new Error(T("e_badfile"));
+  if((d.v|0)>SAVE_VERSION) throw new Error(T("e_newfile"));
+  return d;
+ },
+ apply(d){
+  for(const k in CFG) if(k in d.cfg) CFG[k]=d.cfg[k];
+  if(d.rec && typeof d.rec==="object"){
+   REC.marathon=+d.rec.marathon||0; REC.sprint=+d.rec.sprint||0; REC.wins=+d.rec.wins||0;
+   REC.speed=Object.assign({easy:0,normal:0,hard:0}, d.rec.speed||{});
+   saveRec();
+  }
+  saveCfg();
+  store.set("tiles",CFG.tiles||{});
+  store.set("presets",CFG.presets||[]);
+ }
 };
 function noteRun(g,won,secs){
  let beat=false;
@@ -873,6 +908,25 @@ const I18N = {
  set_tile_clearall:["clear all","모두 지우기"],
  set_tile_reset:["reset","초기화"],
  set_tile_upload:["upload","업로드"],
+ set_data:["Your data","내 데이터"],
+ set_export:["EXPORT","내보내기"],
+ set_import:["IMPORT","가져오기"],
+ set_data_hint:["Saves settings, records, tiles and presets to a file. It includes your database URL, so treat the file as private.","설정, 기록, 타일, 프리셋을 파일로 저장합니다. 데이터베이스 주소가 포함되므로 파일을 공유하지 마세요."],
+ set_presets:["Skin presets","스킨 프리셋"],
+ set_presets_hint:["Save the current seven tiles together, and load them back in one go. Up to five.","현재 7개 타일을 한 세트로 저장하고 한 번에 불러옵니다. 최대 5개."],
+ set_preset_save:["SAVE","저장"],
+ set_preset_load:["LOAD","불러오기"],
+ set_preset_del:["DELETE","삭제"],
+ preset_none:["No presets saved yet.","저장된 프리셋이 없습니다."],
+ preset_n:["Preset {n}","프리셋 {n}"],
+ ph_preset:["preset name","프리셋 이름"],
+ ok_export:["Exported.","내보냈습니다."],
+ ok_import:["Imported.","가져왔습니다."],
+ e_badfile:["That is not a valid settings file.","올바른 설정 파일이 아닙니다."],
+ e_newfile:["That file was saved by a newer version of the game.","더 새로운 버전에서 저장한 파일입니다."],
+ e_preset_full:["Five presets is the limit. Delete one first.","프리셋은 최대 5개입니다. 하나를 먼저 삭제하세요."],
+ e_preset_empty:["Upload at least one tile before saving a preset.","프리셋을 저장하려면 타일을 하나 이상 올리세요."],
+ e_preset_space:["No room left in storage for another preset.","저장 공간이 부족해 프리셋을 저장할 수 없습니다."],
  set_tiles:["Tetromino tiles","테트로미노 타일"],
  set_tiles_hint:["Upload a square image per piece to use in place of its colour.","조각마다 정사각형 이미지를 올리면 색 대신 타일로 사용됩니다."],
  sp_easy:["EASY","쉬움"],
@@ -3590,6 +3644,87 @@ $("#tile-clear").onclick=()=>{
  TYPES.forEach(paintTileRow); paintTileClear(); tileNote("");
 };
 function paintTileClear(){ const b=$("#tile-clear"); if(b) b.hidden=!TYPES.some(t=>CFG.tiles[t]); }
+const MAX_PRESETS=5;
+// one preset is all seven tiles at once; saving copies the current set so a
+// later edit to a tile does not silently rewrite the preset too
+const Presets = {
+ list(){ return Array.isArray(CFG.presets)?CFG.presets:(CFG.presets=[]); },
+ save(name){
+  const l=this.list();
+  if(l.length>=MAX_PRESETS) return tileNote("e_preset_full");
+  const tiles={};
+  for(const t of TYPES) if(CFG.tiles[t]) tiles[t]=CFG.tiles[t];
+  if(!Object.keys(tiles).length) return tileNote("e_preset_empty");
+  l.push({n:String(name||"").slice(0,16)||T("preset_n",{n:l.length+1}), tiles});
+  if(!store.set("presets",l)){ l.pop(); return tileNote("e_preset_space"); }
+  this.paint(); tileNote("");
+ },
+ load(i){
+  const p=this.list()[i];
+  if(!p) return;
+  for(const t of TYPES){
+   if(p.tiles[t]){ CFG.tiles[t]=p.tiles[t]; loadTile(t,p.tiles[t]); }
+   else { delete CFG.tiles[t]; loadTile(t,null); }
+  }
+  store.set("tiles",CFG.tiles);
+  TYPES.forEach(paintTileRow); paintTileClear(); tileNote("");
+ },
+ remove(i){
+  const l=this.list();
+  l.splice(i,1);
+  store.set("presets",l);
+  this.paint();
+ },
+ paint(){
+  const host=$("#preset-rows");
+  if(!host) return;
+  const l=this.list();
+  host.innerHTML=(l.length?l.map((p,i)=>`
+   <div class="sp tile-row">
+    <span class="tile-label">${esc(p.n)}</span>
+    <span class="tile-actions">
+     <button type="button" class="mi ghost" data-pload="${i}" data-i18n="set_preset_load"></button>
+     <button type="button" class="mi ghost" data-pdel="${i}" data-i18n="set_preset_del"></button>
+    </span>
+   </div>`).join("")
+   :'<p class="hint">'+esc(T("preset_none"))+'</p>')
+   +'<div class="sp full"><input class="tf" id="preset-name" maxlength="16" data-i18n-ph="ph_preset"><button type="button" class="mi ghost" id="preset-save" data-i18n="set_preset_save"></button></div>';
+  host.querySelectorAll("[data-pload]").forEach(b=>b.onclick=()=>this.load(+b.dataset.pload));
+  host.querySelectorAll("[data-pdel]").forEach(b=>b.onclick=()=>this.remove(+b.dataset.pdel));
+  $("#preset-save").onclick=()=>{ this.save($("#preset-name").value); $("#preset-name").value=""; };
+  applyLang();
+ }
+};
+Presets.paint();
+$("#b-export").onclick=()=>{
+ try{
+  const blob=new Blob([JSON.stringify(Backup.make())],{type:"application/json"});
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);
+  a.download="tetris-settings-"+new Date().toISOString().slice(0,10)+".json";
+  a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+  UI.ok("#data-hint",T("ok_export"));
+ }catch(e){ UI.err("#data-hint",e.message,true); }
+};
+$("#b-import").onclick=()=>$("#s-import").click();
+$("#s-import").onchange=e=>{
+ const file=e.target.files[0];
+ e.target.value="";
+ if(!file) return;
+ const reader=new FileReader();
+ reader.onerror=()=>UI.err("#data-hint",T("e_badfile"),true);
+ reader.onload=()=>{
+  try{
+   Backup.apply(Backup.check(reader.result));   // validated whole, then applied
+   applyTheme(); applyLang(); repaintSettings();
+   TYPES.forEach(t=>loadTile(t,CFG.tiles[t]||null));
+   TYPES.forEach(paintTileRow); paintTileClear(); Presets.paint();
+   UI.ok("#data-hint",T("ok_import"));
+  }catch(err){ UI.err("#data-hint",err.message,true); }
+ };
+ reader.readAsText(file);
+};
 TYPES.forEach(t=>{
  paintTileRow(t);
  $("#tu-"+t).onclick=()=>{ ; $("#tf-"+t).click(); };
