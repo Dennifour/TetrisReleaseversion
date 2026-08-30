@@ -14,6 +14,14 @@ test("a three-player match runs from creation to a single winner", async () => {
   });
   const [a, b, c] = cs;
 
+  // the result card tears the board down behind itself, so G is gone shortly
+  // after a run resolves -- record each outcome when it happens, not after
+  for (const g of cs) await g.page.evaluate(() => {
+    window.__won = null;
+    const orig = UI.showGameOver.bind(UI);
+    UI.showGameOver = beat => { window.__won = !!(G && G.won); return orig(beat); };
+  });
+
   const id = await a.page.evaluate(() => RoomClient.create());
   a.log("created room", id);
   for (const g of [b, c]) {
@@ -43,12 +51,13 @@ test("a three-player match runs from creation to a single winner", async () => {
     g.log("topped out after", await g.page.evaluate(() => G.lasted()), "ms");
   }
 
-  await a.page.waitForFunction(() => G && G.won === true);
-  a.log("won the round");
+  await a.page.waitForFunction(() => window.__won !== null);
+  a.log("round resolved");
 
+  for (const g of cs) await g.page.waitForFunction(() => window.__won !== null);
   const results = await Promise.all(cs.map(async g => ({
     name: g.name,
-    won: await g.page.evaluate(() => !!(G && G.won)),
+    won: await g.page.evaluate(() => window.__won === true),
   })));
   for (const r of results) a.log("result", r.name, r.won ? "WIN" : "loss");
   assert.equal(results.filter(r => r.won).length, 1, "exactly one winner: " + JSON.stringify(results));

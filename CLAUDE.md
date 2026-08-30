@@ -4,17 +4,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-This repository is a single-file Tetris implementation: `Tetris_version1.html`. There is no build system, package manager, or test suite — HTML, CSS, and JavaScript all live in this one file (~3,600 lines) and it runs by opening it directly in a browser.
+This repository is a single-file Tetris implementation: `Tetris_version1.html`. There is no build system — HTML, CSS, and JavaScript all live in this one file and it runs by opening it directly in a browser. There *is* now a test suite: see **Tests** below.
 
-**The file has a size budget: 150 KB was the target; it currently sits at ~156 KB** after a round of correctness fixes that cost more than the entire comment budget was worth (stripping *every* comment only reaches 151 KB). Getting back under 150 KB now means dropping a feature or flattening the source, so treat the number as a pressure, not a hard gate, and check `ls -l Tetris_version1.html` after any sizable addition.
+**The file has a size budget: 150 KB was the target; it currently sits at ~172 KB** after a round of correctness fixes that cost more than the entire comment budget was worth (stripping *every* comment only reaches 151 KB). Getting back under 150 KB now means dropping a feature or flattening the source, so treat the number as a pressure, not a hard gate, and check `ls -l Tetris_version1.html` after any sizable addition.
 
 That budget is why the in-file comments are terse one-liners and the CSS ships whitespace-collapsed. Long-form design rationale belongs *here*, in `CLAUDE.md`, not in the shipped file — this document is the archive for the "why", and the architecture sections below carry the reasoning that used to live in code comments.
 
 ## Development workflow
 
 - **Run**: open `Tetris_version1.html` in a browser (or serve it with any static file server, e.g. `python3 -m http.server`, if testing features that need a non-`file://` origin such as fullscreen or WebRTC).
-- **Test/lint**: none configured. Verify changes manually in a browser — check the DevTools console for errors and exercise the affected game mode.
-- There is a single `<script>` block starting around line 556; everything before it is markup/CSS for the screens, HUD, and touch controls. The script is split into numbered sections (`/* 0 · SMALL UTILITIES */` … `/* 10 · LAYOUT */`); section 8 no longer exists and the numbering is deliberately left as-is.
+- **Test**: `npm test` (node's built-in runner plus Playwright). See **Tests** below. Still worth a manual pass in a browser for anything visual.
+- There is a single `<script>` block; everything before it is markup/CSS for the screens, HUD, and touch controls. The numbered section banners this file used to describe (`/* 0 · SMALL UTILITIES */` …) are not present in this build — do not go looking for them.
 - Line numbers drift constantly — search by symbol name rather than trusting any line reference in this document.
 
 ## Architecture
@@ -92,7 +92,7 @@ A room you created and left used to stay in the room list. Three independent gua
 - `LANGS = ["en","ko"]` with all strings in `I18N`, keyed by string id with `[en, ko]` tuples. `T(key, vars)` looks up the current-language string with variable interpolation (falling back to the key itself if missing); `EN(key, vars)` is an English-pinned variant used for banners that shouldn't localize. `applyLang()` re-renders all `[data-i18n]` elements and re-invokes `UI.renderRecords()`/`renderRoom()`/`openTab()` so dynamically-built screens pick up the new language. Add new strings to `I18N` with both languages, not just a default.
 
 ### Audio
-- `Sfx` is a self-contained sound-effect module (WebAudio-based, no asset files) — check it before adding new sounds rather than creating a separate audio path.
+- **There is no audio.** The `Sfx` module and all 54 of its call sites were removed; Settings → Audio reads "to be updated". Several of those call sites had the side effect in the *condition* (`if(!G.paused && G.rotate(1)) Sfx.rotate()`), so deleting such a line outright breaks the action — that is why the removal rewrote them rather than stripping them.
 
 ### Gameplay rules worth knowing before you touch them
 - **Garbage**: `queueGarbage()` appends to `pendingGarbage`; `applyGarbage()` lands **at most 8 rows per piece and leaves the remainder queued**. Do not clear the whole queue after capping — that silently swallows an attack that already arrived (it was a real bug). Incoming garbage is cancelled by outgoing attack first, in `resolveClear()`.
@@ -114,6 +114,10 @@ A room you created and left used to stay in the room list. Three independent gua
 - **Never null `/gb` in the round reset**: `startMatch()` clears only this seat's own `live` node. The old reset PATCHed `g:null`, erasing garbage that arrived between the go signal and the reset.
 - **Never `|0` a millisecond timestamp**: `Date.now()` overflows int32, and `hb|0` made every seat read as permanently stale. Use `+x||0`. Small counters like `w` are fine.
 - **One source of truth for room-ness**: check `RoomClient.on`, never a parallel mode flag.
+- **Anything drawn under a fractional `ctx.translate` loses `block()`'s pixel alignment.** `block()` rounds to device pixels in the space *before* the board-give translate, so a fractional give shifted every tile back off-pixel and seamed them on hard drop. `FX.bob` is quantised at the translate for that reason.
+- **A result card must not outlive its run**: `goTimer` is gated on the well it was armed for and cleared by `startGame`, exactly like `boardDrop`. The card also tears the board down behind itself, so leaving it cannot reveal the old well.
+- **`store.set` reports failure**: `Presets.save` checks the return value and rolls back, because a blown localStorage quota is otherwise swallowed silently. Tile images are the bulk of what fills it.
+- **An import is validated whole before anything is written** (`Backup.check` then `Backup.apply`), so a bad file cannot leave settings and records disagreeing.
 
 ## Tests
 `npm test` runs `node --test` over `test/*.test.mjs`. There is no test framework beyond node's built-in runner and Playwright.
@@ -127,6 +131,10 @@ A room you created and left used to stay in the room list. Three independent gua
 - Every control path (keyboard, gamepad, on-screen pad, swipe gestures) funnels through `Input.press`/`Input.release` — that single door is where the countdown and a finished run are locked out. Don't call `Game` methods directly from a new input source.
 - `Pad.poll()` is driven from the frame loop *and* from a slow `setInterval` that covers the menus; the loop only runs while a well exists, so without that interval a gamepad rebind row would wait forever for a button it never read.
 - DAS/ARR live in `Input.tick`; `CFG.arr<=0` means instant shift to the wall.
+- **A device is not a gamepad just because it is listed as one.** Some bluetooth keyboards enumerate through the Gamepad API. `Pad.vet()` adopts a device only once it has actually produced input, prefers `mapping==="standard"`, and treats the axis values seen on first sight as that device's zero — a resting offset past the deadzone otherwise latches a direction on forever. Never go back to "first connected gamepad wins".
+- `LastDevice.kind` (`"key"`/`"pad"`/`"touch"`) is what the UI keys off to match the player's hardware.
+- `MenuNav` drives every menu from arrows or the d-pad. It reuses the `.mi` pill through a `navfocus` class because `:focus-visible` does not fire for gamepad-driven focus. While a menu is up, `Pad.poll` sends to the menu and not the piece.
+- **Swipe gestures are measured against `SWIPE_REF_PX`, never the rendered cell.** Tying them to `L.cell` made a smaller board proportionally twitchier — a 240px drag moved 10 cells at one size and 30 at another. The listeners live on the whole window, not `#screen`, which is exactly the canvas box and shrank the touch area with the board.
 
 ## Conventions in this file
 
