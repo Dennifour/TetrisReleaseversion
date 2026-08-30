@@ -92,8 +92,8 @@ h3:first-of-type{margin-top:4px}
 .mi.nav.ghost{font-size:14.5px;padding:6px 14px}
 .mi[hidden]{display:none}
 .mi::after{content:"";position:absolute;inset:0;border-radius:999px;border:1.5px solid #fff;pointer-events:none;opacity:0;transform:scale(.94)}
-.mi:focus-visible,.mi.on,.mi:active,.mi.lit{outline:none}
-.mi:focus-visible::after,.mi.on::after,.mi:active::after,.mi.lit::after{opacity:1;transform:none;transition:opacity .16s ease,transform .16s cubic-bezier(.2,.9,.25,1)}
+.mi:focus-visible,.mi.navfocus,.mi.on,.mi:active,.mi.lit{outline:none}
+.mi:focus-visible::after,.mi.navfocus::after,.mi.on::after,.mi:active::after,.mi.lit::after{opacity:1;transform:none;transition:opacity .16s ease,transform .16s cubic-bezier(.2,.9,.25,1)}
 @media (hover:hover){.mi:hover::after{opacity:1;transform:none;transition:opacity .16s ease,transform .16s cubic-bezier(.2,.9,.25,1)}
 }
 .mi .sub{display:none}
@@ -1992,6 +1992,15 @@ const Pad = {
   if(this.watching){
    for(let i=0;i<gp.buttons.length;i++) if(gp.buttons[i].pressed && !this.prev[i]){ this.watching(i); break; }
   }
+  // a menu is up: the pad drives the menu, not the piece
+  if(!this.watching && MenuNav.root()){
+   for(const b in MENU_PAD){
+    const on=!!(gp.buttons[b]&&gp.buttons[b].pressed);
+    if(on && !this.prev[b]){ LastDevice.note("pad"); MenuNav.act(MENU_PAD[b]); }
+   }
+   for(let i=0;i<gp.buttons.length;i++) this.prev[i]=gp.buttons[i].pressed;
+   return;
+  }
   for(const a of ACTIONS){
    const on=!this.watching && CFG.pads[a].some(i=>gp.buttons[i]&&gp.buttons[i].pressed);
    if(on && !this.prev["a:"+a]){ LastDevice.note("pad"); Input.press(a); }
@@ -3312,8 +3321,80 @@ function applyTouchMode(){
  document.body.classList.toggle("notouch",CFG.touch==="off");
  layout();
 }
+// standard-mapping d-pad and face buttons, for driving menus with a controller
+const MENU_PAD={12:"up",13:"down",14:"left",15:"right",0:"ok",1:"back"};
+const MENU_KEY={ArrowUp:"up",ArrowDown:"down",ArrowLeft:"left",ArrowRight:"right",
+        Enter:"ok",NumpadEnter:"ok",Space:"ok",Escape:"back"};
+const MenuNav = {
+ // whichever layer is on top; null during gameplay, where keys drive the piece
+ root(){
+  if($("#game-over").classList.contains("on")) return $("#game-over");
+  if(UI.pauseOpen) return $("#pause-menu");
+  return UI.cur ? $(UI.cur) : null;
+ },
+ items(){
+  const r=this.root();
+  if(!r) return [];
+  return [...r.querySelectorAll(".mi,.room-row,.bindrow")]
+   .filter(el=>!el.disabled && el.offsetParent!==null && !el.hidden);
+ },
+ clear(){ $$(".mi.navfocus").forEach(el=>el.classList.remove("navfocus")); },
+ focus(el){
+  this.clear();
+  el.classList.add("navfocus");
+  try{ el.focus({preventScroll:false}); }catch(e){ el.focus(); }
+ },
+ move(d){
+  const it=this.items();
+  if(!it.length) return;
+  const at=it.indexOf(document.activeElement);
+  this.focus(it[at<0 ? (d>0?0:it.length-1) : (at+d+it.length)%it.length]);
+ },
+ // the split screens put the rail beside the panel, so sideways means the rail
+ side(d){
+  const r=this.root();
+  const split=r&&r.querySelector(".split");
+  if(!split) return this.move(d);
+  if(d<0){ split.classList.remove("panel-open"); this.move(0)||this.move(1); }
+  else{
+   const rail=[...split.querySelectorAll(".rail .mi")].find(el=>el.classList.contains("on"));
+   if(rail) rail.click();
+  }
+ },
+ act(a){
+  const r=this.root();
+  if(!r) return false;
+  if(a==="up") this.move(-1);
+  else if(a==="down") this.move(1);
+  else if(a==="left"||a==="right") this.side(a==="left"?-1:1);
+  else if(a==="ok"){
+   const el=document.activeElement;
+   if(el&&r.contains(el)&&el!==document.body) el.click(); else this.move(1);
+  }
+  else if(a==="back"){
+   if(UI.cur==="#v-room") UI.leaveRoom();          // the room has no back target
+   else if(r.id==="game-over") UI.backToMenuFromGameOver();
+   else if(UI.pauseOpen) UI.closePauseMenu();
+   else if(UI.cur&&UI.cur!=="#v-home") UI.back();
+   else return false;
+  }
+  return true;
+ }
+};
+addEventListener("keydown",e=>{
+ const t=e.target;
+ if(t&&(t.tagName==="INPUT"||t.tagName==="TEXTAREA")) return;   // chat and the URL box
+ if(BINDING) return;                                            // a rebind row is armed
+ const a=MENU_KEY[e.code];
+ if(!a||!MenuNav.root()) return;
+ // pressing a key IS the signal that this player is not on touch right now,
+ // so there is nothing to gate on here; a tap clears the ring again
+ LastDevice.note("key");
+ if(MenuNav.act(a)){ e.preventDefault(); e.stopPropagation(); }
+},true);
 document.addEventListener("pointerdown",e=>{
  const el=e.target.closest && e.target.closest(".mi");
+ if(el) MenuNav.clear();
  if(!el) return;
  el.classList.add("lit");
  clearTimeout(el._lit);

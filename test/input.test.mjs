@@ -31,7 +31,7 @@ const REAL_PAD = [{ id: "Xbox Controller", mapping: "standard", axes: [0, 0], bu
 test("an idle bluetooth keyboard is not adopted as the controller", async () => {
   const { c, end } = await boot(BT_KEYBOARD);
   const out = await c.page.evaluate(() => {
-    CFG.padOn = true;
+    CFG.padOn = true; UI.closeAll();   // no menu up: the pad drives the piece
     for (let i = 0; i < 10; i++) Pad.poll();
     return { fired: window.__fired, active: Pad.activeId() };
   });
@@ -43,7 +43,7 @@ test("an idle bluetooth keyboard is not adopted as the controller", async () => 
 test("a resting axis offset never latches a direction", async () => {
   const { c, end } = await boot(BT_KEYBOARD);
   const fired = await c.page.evaluate(() => {
-    CFG.padOn = true;
+    CFG.padOn = true; UI.closeAll();   // no menu up: the pad drives the piece
     Pad.poll();
     // even once the device is used, its rest position is the zero point
     window.__pads[0].buttons[0] = true; Pad.poll();
@@ -57,7 +57,7 @@ test("a resting axis offset never latches a direction", async () => {
 test("a real controller drives input once it is actually used", async () => {
   const { c, end } = await boot(REAL_PAD);
   const out = await c.page.evaluate(() => {
-    CFG.padOn = true;
+    CFG.padOn = true; UI.closeAll();   // no menu up: the pad drives the piece
     Pad.poll();
     const before = Pad.activeId();
     const btn = CFG.pads.hardDrop[0];
@@ -74,7 +74,7 @@ test("a real controller drives input once it is actually used", async () => {
 test("a real controller's stick still moves the piece", async () => {
   const { c, end } = await boot(REAL_PAD);
   const fired = await c.page.evaluate(() => {
-    CFG.padOn = true;
+    CFG.padOn = true; UI.closeAll();   // no menu up: the pad drives the piece
     Pad.poll();
     window.__pads[0].buttons[0] = true; Pad.poll();      // wake it
     window.__pads[0].buttons[0] = false; Pad.poll();
@@ -91,7 +91,7 @@ test("a real controller's stick still moves the piece", async () => {
 test("the last-used device is tracked and distinguishes keyboard from pad", async () => {
   const { c, end } = await boot(REAL_PAD);
   const out = await c.page.evaluate(() => {
-    CFG.padOn = true;
+    CFG.padOn = true; UI.closeAll();   // no menu up: the pad drives the piece
     const seen = {};
     dispatchEvent(new KeyboardEvent("keydown", { code: CFG.keys.left[0] }));
     seen.afterKey = LastDevice.kind;
