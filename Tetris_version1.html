@@ -2474,6 +2474,40 @@ const Sig = {
   return { close(){ closed=true; try{ es&&es.close(); }catch(e){} } };
  }
 };
+// one writer for room state: the old object was mutated from six paths
+const RoomState = {
+ make(myPid){ return {tree:{}, me:myPid, id:null}; },
+ apply(st,ev){
+  const parts=String(ev.path||"/").split("/").filter(Boolean);
+  if(!parts.length){ st.tree = ev.type==="patch" ? Object.assign(st.tree||{},ev.data||{}) : (ev.data||{}); return; }
+  let n=st.tree;
+  for(const s of parts.slice(0,-1)){ if(!n[s]||typeof n[s]!=="object") n[s]={}; n=n[s]; }
+  const last=parts[parts.length-1];
+  if(ev.data===null||ev.data===undefined) delete n[last];
+  else if(ev.type==="patch" && n[last] && typeof n[last]==="object") Object.assign(n[last],ev.data);
+  else n[last]=ev.data;
+ },
+ view(st,nowMs){
+  const t=st.tree||{};
+  const meta=t.meta||{}, go=t.go||null, live=t.live||{};
+  const seats=Object.keys(t.seat||{}).map(pid=>{
+   const r=t.seat[pid]||{};
+   return {pid, n:String(r.n||"").slice(0,12)||T("opponent"), j:r.j|0, hb:r.hb|0,
+       rdy:!!r.rdy, spec:!!r.spec, w:r.w|0, d:!!(live[pid]&&live[pid].o),
+       ms:(live[pid]&&live[pid].ms)|0, fresh:(nowMs-(r.hb|0))<SEAT_TTL};
+  }).sort((a,b)=>a.j-b.j||(a.pid<b.pid?-1:1));
+  const v={id:st.id||null, host:meta.h||null, rule:meta.r==="score"?"score":"attack",
+      go, seats, live, roster:(go&&go.roster)||null, me:st.me};
+  v.alive=seats.filter(s=>!s.d && RoomState.inRound(v,s.pid));
+  return v;
+ },
+ // the roster is frozen by the host at go time, so every client agrees on it
+ inRound(v,pid){
+  if(!v.roster) return false;
+  const s=v.seats.find(x=>x.pid===pid);
+  return !!s && v.roster[pid]===s.j;
+ }
+};
 const ROOM_STALE=120000;
 const ROOM_ALPHA="ACDEFGHJKLMNPQRTUVWXYZ2346789";
 const roomId = n => Array.from({length:n||6},()=>ROOM_ALPHA[rnd(ROOM_ALPHA.length)]).join("");
