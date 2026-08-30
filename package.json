@@ -1,0 +1,10 @@
+{
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test --test-timeout=45000 test/*.test.mjs"
+  },
+  "devDependencies": {
+    "playwright": "^1.62.1"
+  }
+}
