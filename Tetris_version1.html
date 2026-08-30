@@ -1564,7 +1564,9 @@ function render(g, opp){
  ctx.setTransform(1,0,0,1,0,0);
  ctx.clearRect(0,0,cv.width,cv.height);
  ctx.setTransform(DPR,0,0,DPR,0,0);
- if(FX.bob) ctx.translate(0,FX.bob*L.cell);
+ // quantised like block()'s own rounding: a fractional give shifted every
+ // already-pixel-aligned tile off-pixel, seaming them on hard drop
+ if(FX.bob) ctx.translate(0,Math.round(FX.bob*L.cell*DPR)/DPR);
  drawWell(g);
  if(g.mode==="versus") (opp||[]).slice(0,3).forEach((f,i)=>drawOpponent(f,i,g));
  drawGarbageMeter(g);
