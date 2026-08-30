@@ -6,7 +6,6 @@ const segs = p => p.split("/").filter(Boolean);
 
 export function startMock({ port = 0 } = {}) {
   let tree = {};
-  let rev = 0;
   const streams = new Set();
 
   const read = path => {
@@ -58,11 +57,16 @@ export function startMock({ port = 0 } = {}) {
       else n[last] = clone(val);
     }
     prune();
-    rev++;
     emit(path, merge);
   };
 
-  const etagOf = path => '"' + rev + ":" + JSON.stringify(read(path)).length + '"';
+  // content-scoped, like the real thing: an unrelated write must not invalidate it
+  const etagOf = path => {
+    const s = JSON.stringify(read(path));
+    let h = 2166136261;
+    for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+    return '"' + (h >>> 0).toString(36) + "-" + s.length + '"';
+  };
 
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, "http://x");

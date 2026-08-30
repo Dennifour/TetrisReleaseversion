@@ -2508,6 +2508,97 @@ const RoomState = {
   return !!s && v.roster[pid]===s.j;
  }
 };
+const RoomClient = {
+ id:null, on:false, st:null, sub:null, chatSub:null, hbTimer:null,
+ chat:[], seen:new Set(), gseq:0, lastGo:0, starting:0,
+ view(){ return RoomState.view(this.st||RoomState.make(PID), Date.now()); },
+ isHost(){ return this.on && this.view().host===PID; },
+ path(){ return "/rooms/"+this.id; },
+ mine(){ return this.path()+"/seat/"+PID; },
+ // read-only: the old listing deleted other people's rooms as a side effect
+ async listRooms(){
+  if(!Sig.on()) throw new Error(T("e_nofb"));
+  const idx=await Sig.get("/lobby")||{};
+  const t0=Date.now();
+  return Object.keys(idx).filter(id=>t0-((idx[id]||{}).t||0)<LOBBY_TTL)
+   .map(id=>({id, name:String((idx[id]||{}).n||"").slice(0,12), count:(idx[id]||{}).c|0}));
+ },
+ async create(){
+  if(!Sig.on()) throw new Error(T("e_nofb"));
+  PID=PID||roomId(8);
+  const id=roomId(6), t=Date.now();
+  NET_RULE="attack";
+  await Sig.put("/rooms/"+id,{meta:{h:PID,r:"attack"}, seat:{[PID]:{n:CFG.name,j:t,hb:t,w:0}}});
+  await Sig.put("/lobby/"+id,{n:CFG.name,t,c:1});
+  this.begin(id);
+  return id;
+ },
+ async join(id){
+  if(!Sig.on()) throw new Error(T("e_nofb"));
+  PID=PID||roomId(8);
+  const v=await Sig.get("/rooms/"+id);
+  if(!v||!v.meta) throw new Error(T("e_noroom"));
+  const t=Date.now();
+  // cas closes the check-then-act race the old seat count had
+  const seat=await Sig.cas("/rooms/"+id+"/seat",cur=>{
+   const m=cur||{};
+   const live=Object.keys(m).filter(k=>t-((m[k]||{}).hb||0)<SEAT_TTL);
+   if(live.length>=MAX_SEATS && !m[PID]) return m;
+   return Object.assign({},m,{[PID]:{n:CFG.name,j:t,hb:t,w:0}});
+  });
+  if(!seat||!seat[PID]) throw new Error(T("e_roomfull"));
+  await Sig.patch("/lobby/"+id,{t,c:Object.keys(seat).length});
+  this.begin(id);
+ },
+ begin(id){
+  this.id=id; this.on=true;
+  this.st=RoomState.make(PID); this.st.id=id;
+  this.chat=[]; this.seen=new Set(); this.gseq=0; this.lastGo=0; this.starting=0;
+  this.sub=Sig.stream(this.path(),ev=>this.onEvent(ev));
+  this.hbTimer=setInterval(()=>this.beat(),HB_MS);
+ },
+ onEvent(ev){
+  if(!this.on) return;
+  RoomState.apply(this.st,ev);
+  const v=this.view();
+  if(!v.seats.some(s=>s.pid===PID)){ UI.roomGone(); return; }
+  this.onRound(v);
+  UI.renderRoom();
+ },
+ onRound(){},
+ async beat(){
+  if(!this.on) return;
+  const t=Date.now();
+  try{
+   await Sig.patch(this.mine(),{hb:t});
+   const n=this.view().seats.filter(s=>s.fresh).length||1;
+   await Sig.patch("/lobby/"+this.id,{t,c:n});   // any occupant refreshes it, not only the host
+  }catch(e){}
+ },
+ async leave(){
+  if(!this.on && !this.id) return;
+  const id=this.id;
+  this.on=false;
+  clearInterval(this.hbTimer); this.hbTimer=null;
+  try{ this.sub&&this.sub.close(); }catch(e){}
+  try{ this.chatSub&&this.chatSub.close(); }catch(e){}
+  this.sub=this.chatSub=null; this.id=null; this.st=null; this.chat=[];
+  // awaited, and capped so a dead network cannot trap the player on this screen
+  const work=(async()=>{
+   await Sig.del("/rooms/"+id+"/seat/"+PID);
+   await Sig.del("/rooms/"+id+"/live/"+PID);
+   // re-read rather than trust the last snapshot: two players can leave at once
+   const left=await Sig.get("/rooms/"+id+"/seat");
+   const t=Date.now();
+   const live=Object.keys(left||{}).filter(k=>t-((left[k]||{}).hb||0)<SEAT_TTL);
+   if(live.length){ await Sig.patch("/lobby/"+id,{t,c:live.length}); return; }
+   await Sig.del("/rooms/"+id);
+   await Sig.del("/lobby/"+id);
+   await Sig.del("/chat/"+id);
+  })();
+  await Promise.race([work.catch(()=>{}), Sig.sleep(LEAVE_TIMEOUT_MS)]);
+ }
+};
 const ROOM_STALE=120000;
 const ROOM_ALPHA="ACDEFGHJKLMNPQRTUVWXYZ2346789";
 const roomId = n => Array.from({length:n||6},()=>ROOM_ALPHA[rnd(ROOM_ALPHA.length)]).join("");
@@ -2739,7 +2830,6 @@ const Net = {
  resetStats(){ this.stats={host:0,srflx:0,ice:"new",conn:"new"}; UI.diag(); },
  reset(){
   this.clearWatchdog();
-  Room.stop();
   this.mode="p2p";
   try{ this.dc&&this.dc.close(); }catch(e){}
   try{ this.pc&&this.pc.close(); }catch(e){}
@@ -3050,7 +3140,7 @@ const UI = {
   const list=$("#on-list");
   if(!list) return;
   try{
-   const rooms=await Net.listRooms();
+   const rooms=await RoomClient.listRooms();
    list.classList.toggle("has-rooms",!!rooms.length);
    if(!rooms.length){ list.innerHTML='<p class="diag" id="on-none">'+esc(T("on_none"))+'</p>'; return; }
    list.innerHTML=rooms.map(r=>
@@ -3063,12 +3153,15 @@ const UI = {
   Sfx.ui();
   Net.reset();
   clearInterval(this._rooms);
-  try{ await Net.openRoom(); this.showRoom(); }
+  // mode flips only once the room is actually up: a failed open used to
+  // leave it on "room" and silently swallow every later P2P send
+  try{ await RoomClient.create(); Net.mode="room"; Net.role="host"; Net.setState("connected"); this.showRoom(); }
   catch(e){ this.err("#srv-hint",e.message,true); }
  },
  async doJoinRoom(id){
   Sfx.ui();
-  try{ await Net.joinRoom(id); this.showRoom(); }
+  Net.reset();
+  try{ await RoomClient.join(id); Net.mode="room"; Net.role="guest"; Net.setState("connected"); this.showRoom(); }
   catch(e){ this.err("#srv-hint",e.message,true); this.refreshRooms(); }
  },
  async doHost(){
@@ -3226,11 +3319,15 @@ const UI = {
   ).join("") : '<p class="empty">'+esc(T("chat_empty"))+'</p>';
   el.scrollTop=el.scrollHeight;
  },
- leaveRoom(){
-  Net.reset(); READY_P2P.me=READY_P2P.peer=false;
+ async leaveRoom(){
+  READY_P2P.me=READY_P2P.peer=false;
+  dropBoard();
+  // the deletes are awaited before the lobby is re-listed, or the room you
+  // just left is still in the list you land on
+  try{ await RoomClient.leave(); }catch(e){}
+  Net.reset();
   this.show("#v-lobby");
   this.doOnline();
-  dropBoard();
  },
  strandedMatch(hintKey){
   if(G && !G.over && G.mode==="versus"){ G.over=true; G.stranded=true; G.events.length=0; }
@@ -3770,7 +3867,7 @@ document.addEventListener("visibilitychange",()=>{
  if(G.mode==="versus") dropOut();
  else if(!G.paused) UI.togglePause();
 });
-addEventListener("beforeunload",()=>{ try{ Net.reset(); }catch(e){} });
+addEventListener("pagehide",()=>{ try{ if(RoomClient.on) RoomClient.leave(); Net.reset(); }catch(e){} });
 </script>
 </body>
 </html>
