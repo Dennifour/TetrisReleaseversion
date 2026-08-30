@@ -256,7 +256,7 @@ html[lang=ko] .fold summary h3{letter-spacing:.02em}
 .chat-send{flex:0 0 auto;width:44px;height:44px;border-radius:var(--radius-sm,10px);border:1px solid var(--line);background:var(--surface);color:var(--fg-dim);display:grid;place-items:center;cursor:pointer}
 .chat-send svg{width:17px;height:17px;fill:currentColor}
 .chat-send:hover{color:var(--fg);border-color:var(--line-strong)}
-@media (min-width:760px){.dash-grid{grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-rows:auto auto;grid-template-areas:"seats match" "chat match"}
+@media (min-width:760px){.dash-grid{grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-rows:auto auto;grid-template-areas:"seats chat" "match chat"}
 .seats-panel{grid-area:seats}
 .match-panel{grid-area:match;justify-content:center}
 .room-chat{grid-area:chat}
@@ -2142,6 +2142,7 @@ function startMatch(){
 let rafId=0, lastT=0, sendAcc=0;
 function startGame(mode){
  clearTimeout(boardDrop); boardDrop=0;   // a fade still pending would null this new well
+ clearTimeout(goTimer); goTimer=0;       // and a result card armed by the last run
  ;                             // and notes queued by the last run must not play over this one
  UI.hideGameOver(); UI.closePauseMenu();
  G=new Game(mode);
@@ -2885,7 +2886,8 @@ const NET_SCREENS = {"#v-host":1,"#v-join":1};
 const EXIT_MS=100;
 // a deliberate beat between screens, matched by .veil's transition
 function afterScreen(fn){ setTimeout(fn,EXIT_MS); }
-const BOARD_FADE_MS=320;
+const BOARD_FADE_MS=320, RESULT_DELAY_MS=1000;
+let goTimer=0;
 // held so startGame() can cancel it, and gated on the well it was armed for:
 // otherwise quitting and restarting inside the fade blanked the NEW run
 let boardDrop=0;
@@ -2985,13 +2987,23 @@ const UI = {
   const menuKey = g.mode==="versus" ? "go_room" : "go_menu";
   const menuBtn=$("#go-menu");
   menuBtn.dataset.i18n=menuKey; menuBtn.textContent=T(menuKey);
-  document.body.classList.add("over");
-  $("#game-over").classList.add("on");
+  // the card lands a beat after the run ends, so the last move is readable;
+  // gated on the well it was armed for, like dropBoard's own timer
+  this._goMode=g.mode;
+  clearTimeout(goTimer);
+  goTimer=setTimeout(()=>{
+   goTimer=0;
+   if(G!==g) return;
+   document.body.classList.add("over");
+   $("#game-over").classList.add("on");
+   dropBoard();                 // clear the well behind the card, not just over it
+  },RESULT_DELAY_MS);
  },
- hideGameOver(){ document.body.classList.remove("over"); $("#game-over").classList.remove("on"); },
+ hideGameOver(){ clearTimeout(goTimer); goTimer=0; document.body.classList.remove("over"); $("#game-over").classList.remove("on"); },
  backToMenuFromGameOver(){
   this.hideGameOver();
-  if(G && G.mode==="versus"){ this.showRoom(); return; }
+  // G is already gone by now: the card tore the board down behind itself
+  if(this._goMode==="versus"){ this.showRoom(); return; }
   this.quitToMenu();
  },
  showRecords(){ this.renderRecords(); this.show("#v-records"); },
