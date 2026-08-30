@@ -12,15 +12,14 @@
 :root{
   --bg:#0a0a0c;
   --surface:#111113;
-  --surface-2:#171719;
   --line:rgba(255,255,255,.14);
   --line-strong:rgba(255,255,255,.26);
   --fg:#ededf0;
   --fg-dim:#c4c4cc;
   --fg-faint:#9a9aa5;
-  --accent:#ededf0;
   --danger:#e5484d;
   --radius:4px;
+  --radius-sm:10px;
 }
 
 *,*::before,*::after{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -335,7 +334,6 @@ input.tf:focus,textarea.tf:focus{outline:none;color:var(--fg);border-color:var(-
 .sp b{flex:0 0 auto;text-align:right;font-weight:600;font-size:14px;color:var(--fg)}
 .sp small{display:block;margin-top:5px;color:var(--fg-faint);font-size:12.5px;line-height:1.5}
 .sp small[id]{opacity:.5}
-#o-stats{margin:2px 0 4px}
 
 /* Settings runs every line a size up from the app-wide defaults above —
    it's read at arm's length against a moving background, not a bordered
@@ -425,7 +423,6 @@ html[lang=ko] .fold summary h3{letter-spacing:.02em}
 .tile-actions{display:flex;align-items:center;gap:4px;flex:0 0 auto}
 .tile-actions .mi{padding:5px 12px;font-size:13px}
 .opts .sp.rng input[type=range]{display:block;width:100%;flex:none;margin-top:13px}
-.sp.moot{opacity:.4;pointer-events:none}
 .opts .full{grid-column:1/-1}
 .opts .full.row{margin-top:6px}
 @media (max-height:600px){
@@ -658,6 +655,9 @@ html[lang=ko] .fold summary h3{letter-spacing:.02em}
         </section>
       </div>
     </div>
+    <!-- Outside the split, so a match that ended by losing the room says so
+         whichever panel the player left selected. -->
+    <p class="hint" id="lob-hint"></p>
   </div>
 </div>
 
@@ -1198,13 +1198,13 @@ const I18N = {
   set_swdrop:["Drag to drop one row","한 줄 드롭 거리"],
   set_swflick:["Flick speed for a hard drop","하드 드롭 튕김 속도"],
   set_swipe:["SWIPE","스와이프"],
+  set_swipe_s:["No buttons: drag sideways to move, drag down to soft drop, flick down to hard drop, drag up to hold, tap to rotate.","버튼 없이 조작합니다. 좌우로 끌면 이동, 아래로 끌면 소프트 드롭, 아래로 튕기면 하드 드롭, 위로 끌면 홀드, 탭하면 회전."],
+  set_swmove:["Drag to move one cell","한 칸 이동 거리"],
+  set_swreset:["RESET SENSITIVITY","감도 초기화"],
   set_tile_reset:["reset","초기화"],
   set_tile_upload:["upload","업로드"],
   set_tiles:["Tetromino tiles","테트로미노 타일"],
   set_tiles_hint:["Upload a square image per piece to use in place of its colour.","조각마다 정사각형 이미지를 올리면 색 대신 타일로 사용됩니다."],
-  set_swipe_s:["No buttons: drag sideways to move, drag down to soft drop, flick down to hard drop, drag up to hold, tap to rotate.","버튼 없이 조작합니다. 좌우로 끌면 이동, 아래로 끌면 소프트 드롭, 아래로 튕기면 하드 드롭, 위로 끌면 홀드, 탭하면 회전."],
-  set_swmove:["Drag to move one cell","한 칸 이동 거리"],
-  set_swreset:["RESET SENSITIVITY","감도 초기화"],
   set_vol:["Volume","음량"],
   sp_easy:["EASY","쉬움"],
   sp_hard:["HARD","어려움"],
@@ -1583,6 +1583,19 @@ class Game {
     return false;
   }
 
+  /* Two quarter turns taken as one move. Run as a bare pair, a 180 whose
+     first turn was blocked but whose second was not left the piece lying on
+     its side — a quarter turn the player never asked for, in the tight spot
+     where it costs most. Either both land or the piece has not moved. */
+  rotate180(){
+    if(this.over||this.clearing) return false;
+    const was={x:this.cur.x,y:this.cur.y,r:this.cur.r,act:this.lastAction,kick:this.lastKick};
+    if(this.rotate(1) && this.rotate(1)) return true;
+    this.cur.x=was.x; this.cur.y=was.y; this.cur.r=was.r;
+    this.lastAction=was.act; this.lastKick=was.kick;
+    return false;
+  }
+
   touchLockReset(){
     if(this.grounded && this.lockResets<15){ this.lockTimer=0; this.lockResets++; }
   }
@@ -1737,11 +1750,20 @@ class Game {
   }
   pendingCount(){ return this.pendingGarbage.reduce((s,g)=>s+g.lines,0); }
 
+  /* Eight rows at most in one go, and the rest stays queued for the next
+     piece rather than being thrown away: an attack that arrived is an attack
+     that has to land, and clearing the whole queue here quietly swallowed
+     everything past the cap. */
   applyGarbage(){
-    let total=this.pendingCount();
+    const total=Math.min(this.pendingCount(),8);
     if(total<=0) return;
-    total=Math.min(total,8);
-    this.pendingGarbage=[];
+    let owed=total;
+    while(owed>0 && this.pendingGarbage.length){
+      const g=this.pendingGarbage[0];
+      const take=Math.min(owed,g.lines);
+      g.lines-=take; owed-=take;
+      if(g.lines<=0) this.pendingGarbage.shift();
+    }
     for(let i=0;i<total;i++){
       if(Math.random()<0.3) this.garbageHole=rnd(COLS);
       const row=new Array(COLS).fill("G");
@@ -2335,8 +2357,6 @@ function drawGarbageMeter(g){
   ctx.stroke();
 }
 
-const pvTile=w=>w/4.4;
-
 /* Three sides of a thin rectangle. The top is left open, so the well reads as
    a vessel that pieces fall into instead of a closed box. */
 function wellEdge(x,y,w,h,cell){
@@ -2536,7 +2556,7 @@ const Input = {
       case "hardDrop": if(!G.paused){ G.hardDrop(); } break;
       case "rotR": if(!G.paused && G.rotate(1))  Sfx.rotate(); break;
       case "rotL": if(!G.paused && G.rotate(-1)) Sfx.rotate(); break;
-      case "rot180": if(!G.paused){ G.rotate(1); G.rotate(1); Sfx.rotate(); } break;
+      case "rot180": if(!G.paused && G.rotate180()) Sfx.rotate(); break;
       case "hold": if(!G.paused && G.holdPiece()) Sfx.hold(); break;
       case "pause": UI.togglePause(); break;
     }
@@ -2620,7 +2640,10 @@ addEventListener("blur",()=>{ downKeys.clear(); Input.reset(); });
 const Pad = {
   prev:{}, axis:0, axisDown:false, watching:null,
   poll(){
-    if(!CFG.padOn || !navigator.getGamepads) return;
+    if(!navigator.getGamepads) return;
+    // A pad switched off still has to be readable while a row is waiting for
+    // the button to bind; nothing below acts on one while `watching` is set.
+    if(!CFG.padOn && !this.watching) return;
     let gp=null;
     for(const g of navigator.getGamepads()) if(g&&g.connected){ gp=g; break; }
     if(!gp){ this.prev={}; return; }
@@ -2757,9 +2780,6 @@ const START_TXT_MS=700;
 let startHoldEnd=0;
 /* Built from the room's own player records rather than kept alongside them,
    so there is one account of who is in and how they are doing. */
-/* Who has been asked into this room, so the button can say so. Cleared with
-   the room, since the answer to an invite is joining it. */
-const ASKED=new Set();
 const READY_P2P={me:false,peer:false};
 const WINS_P2P ={me:0,peer:0};
 
@@ -2955,7 +2975,6 @@ function startGame(mode){
   FX.banners.length=0; FX.clearBanners.length=0; FX.bob=FX.bobV=0;
   Input.reset();
   UI.closeAll();
-  document.body.classList.toggle("hot",mode==="versus");
   if(!rafId) loop(now());
 }
 
@@ -3260,7 +3279,6 @@ const FB = {
     return t&&t!=="null" ? JSON.parse(t) : null;
   },
   get(path){ return this.req(path,{cache:"no-store"}); },
-  keys(path){ return this.req(path,{cache:"no-store"},"?shallow=true"); },   // names only, no payload
   put(path,val){ return this.req(path,{method:"PUT",body:JSON.stringify(val)}); },
   /* Merges into a node instead of replacing it, which matters wherever two
      writers share one: a heartbeat that PUT the whole record would take an
@@ -3270,19 +3288,6 @@ const FB = {
      from beforeunload is cancelled with the page, and the seat it was there to
      give up sits in the room until it goes stale. */
   del(path){ return this.req(path,{method:"DELETE",keepalive:true}).catch(()=>null); },
-  /* Polled rather than streamed: EventSource cannot be aborted mid-flight on
-     every browser, and one small GET a second is well inside the free tier. */
-  watch(path,ms,cb){
-    let stop=false;
-    (async function loop(){
-      while(!stop){
-        try{ const v=await FB.get(path); if(v!=null && !stop){ stop=true; cb(null,v); return; } }
-        catch(e){ if(!stop){ stop=true; cb(e); return; } }
-        await new Promise(r=>setTimeout(r,ms));
-      }
-    })();
-    return ()=>{ stop=true; };
-  }
 };
 
 const ROOM_STALE=120000;          // a room nobody claimed in two minutes is a ghost
@@ -3419,7 +3424,6 @@ const Room = {
     this.players=[]; this.chat=[]; this.gseq=0; this.lastGo=lastGo||0;
     this.roster=new Map(); this.dropped=new Set(); this.starting=0; this.lastPoll=now();
     this.cq=""; this.listedC=0; this.listedAt=0; this.beatAt=0;
-    Who.inRoom(id);
     this.beat();
     this.hb=setInterval(()=>this.beat(),ROOM_HB);
     this.poll();
@@ -3432,7 +3436,7 @@ const Room = {
     clearTimeout(this.timer); clearInterval(this.hb);
     this.timer=this.hb=null; this.id=null;
     this.players=[]; this.chat=[]; this.roster=new Map(); this.dropped=new Set();
-    this.starting=0; this.lastPoll=0; this.cq=""; this.beatAt=0; ASKED.clear();
+    this.starting=0; this.lastPoll=0; this.cq=""; this.beatAt=0;
     if(id && FB.on()){
       // the host owns the room and takes it down with it, log and all
       if(host){ FB.del("/lobby/"+id); FB.del("/rooms/"+id); FB.del("/chat/"+id); }
@@ -3444,7 +3448,6 @@ const Room = {
       else if(!gone){ FB.del("/rooms/"+id+"/p/"+PID); FB.put("/lobby/"+id+"/t",Date.now()); }
       else FB.del("/rooms/"+id+"/p/"+PID);
     }
-    Who.inRoom(null);
   },
 
   /* How fast the room is read. A live round needs every tick — garbage rides
@@ -3685,64 +3688,10 @@ const Room = {
   }
 };
 
-/* ---- who else is out there ----------------------------------------------
-   Everyone pointed at the same database announces themselves under /who and
-   keeps a heartbeat going, so a room can list people to invite rather than
-   only codes to type. An invite is written into the invitee's own record —
-   the same addressing the garbage uses, and for the same reason.          */
-const WHO_HB=4000, WHO_GONE=15000;
-const Who = {
-  on:false, hb:null, timer:null, room:null, people:[], invite:null,
-
-  start(){
-    if(!FB.on()||this.on) return;
-    PID=PID||roomId(8);
-    this.on=true;
-    this.beat();
-    this.hb=setInterval(()=>this.beat(),WHO_HB);
-    this.poll();
-  },
-  stop(){
-    if(!this.on) return;
-    this.on=false;
-    clearInterval(this.hb); clearTimeout(this.timer);
-    this.hb=this.timer=null; this.people=[]; this.invite=null;
-    if(FB.on()) FB.del("/who/"+PID);
-  },
-  inRoom(id){ this.room=id; this.beat(); },
-  beat(){
-    if(!this.on||!FB.on()) return;
-    // merged, not replaced: an invite lives under this same record
-    FB.patch("/who/"+PID,{n:CFG.name, t:Date.now(), r:this.room||0}).catch(()=>{});
-  },
-  ask(pid){ if(Room.on) FB.put("/who/"+pid+"/inv",{r:Room.id, n:CFG.name, t:Date.now()}).catch(()=>{}); },
-
-  async poll(){
-    if(!this.on) return;
-    try{
-      const v=await FB.get("/who");
-      if(!this.on) return;
-      const now=Date.now();
-      this.people=Object.keys(v||{}).map(pid=>({
-        pid, n:String((v[pid]||{}).n||"").slice(0,12), t:(v[pid]||{}).t||0, r:(v[pid]||{}).r||0
-      })).filter(p=>p.pid!==PID && now-p.t<WHO_GONE)
-        .sort((a,b)=>a.n<b.n?-1:1);
-
-      const inv=(v&&v[PID]||{}).inv;
-      if(inv && now-(inv.t||0)<60000 && (!this.invite||this.invite.t!==inv.t)){
-        this.invite={r:inv.r, n:String(inv.n||"").slice(0,12), t:inv.t};
-        UI.gotInvite(this.invite);
-      }
-    }catch(e){ /* a dropped poll is not an empty world */ }
-    if(this.on) this.timer=setTimeout(()=>this.poll(),WHO_HB);
-  },
-  clearInvite(){ this.invite=null; if(FB.on()) FB.del("/who/"+PID+"/inv"); }
-};
-
 const Net = {
   pc:null, dc:null, role:null, peerName:"", state:"idle",
   stats:{host:0,srflx:0,ice:"new",conn:"new"},
-  watchdog:null, room:null, unwatch:null, offerCode:"", mode:"p2p", lastB:"",
+  watchdog:null, offerCode:"", mode:"p2p", lastB:"",
 
   ready(){ return this.mode==="room" ? Room.on : !!(this.dc && this.dc.readyState==="open"); },
   setState(s){ this.state=s; UI.netStatus(); },
@@ -3752,25 +3701,12 @@ const Net = {
   reset(){
     this.clearWatchdog();
     Room.stop();
-    this.dropRoom();
     this.mode="p2p";
     try{ this.dc&&this.dc.close(); }catch(e){}
     try{ this.pc&&this.pc.close(); }catch(e){}
     this.pc=this.dc=null; this.role=null; this.peerName=""; this.lastB="";
     this.resetStats();
     this.setState("idle");
-  },
-
-  /* Room teardown belongs to Room.stop(), which reset() has already run by the
-     time this is reached — and which reads Room.host rather than Net.role. The
-     two disagree after a host migration: a host that stalled long enough to be
-     replaced still says role==="host" here, and wiping on that took a room away
-     from the players who had legitimately inherited it. Nothing else is left to
-     drop — /rooms/<id>/g was the old hand-swapped signalling node and no longer
-     exists — so this only lets go of the id. */
-  dropRoom(){
-    if(this.unwatch){ this.unwatch(); this.unwatch=null; }
-    this.room=null;
   },
 
   /* soft: the reply travels back by hand, so a long wait is not a failure —
@@ -3817,7 +3753,6 @@ const Net = {
     this.dc=dc;
     dc.onopen=()=>{
       this.clearWatchdog();
-      this.dropRoom();                    // the codes have done their job
       this.setState("connected");
       this.send({t:"hi",name:CFG.name,r:NET_RULE});
       // The match starts on the peer's "hi", not on this open: the two channels
@@ -3956,7 +3891,6 @@ const Net = {
     this.reset();
     this.role="host"; this.mode="room";
     const id=await Room.create();
-    this.room=id;
     this.setState("connected");
     return id;
   },
@@ -3965,7 +3899,6 @@ const Net = {
     this.reset();
     this.role="guest"; this.mode="room";
     await Room.join(id);
-    this.room=id;
     this.setState("connected");
   }
 };
@@ -4018,13 +3951,10 @@ const UI = {
     }
     if(!inner) this.board(id);
     $$(".veil").forEach(v=>{
-      if(v.classList.contains("on")) v.classList.add("out");
-      v.classList.remove("on","fwd");
+      v.classList.remove("on");
     });
     if(id){
       const el=$(id);
-      el.classList.remove("out");
-      el.classList.add("fwd");
       const c=el.querySelector(".card");
       if(c) this._flush=getComputedStyle(c).transform;   // force the parked position to take before the next frame
       el.classList.add("on");
@@ -4251,7 +4181,6 @@ const UI = {
     Net.setState("failed");
     this.diag();
   },
-  gotInvite(){},   // no invite/presence UI in this build
 
   /* room */
   peerJoined(){ if(G && G.mode==="versus" && !G.over) return; Sfx.win(); this.showRoom(); },
@@ -4925,6 +4854,12 @@ if(fsCan){
   document.addEventListener("webkitfullscreenchange",syncFs);
 }
 
+/* The frame loop only runs while there is a well, so nothing read the pad in
+   the menus at all — and a rebind row sat on "press…" forever, waiting for a
+   button press that was never polled. A slow tick covers the settings screen;
+   loop() takes back over at its own rate the moment a game starts. */
+setInterval(()=>{ if(!rafId && (Pad.watching || UI.cur==="#v-set")) Pad.poll(); },60);
+
 /* boot — the saved touch scheme has to reach the body, not just the settings
    screen: it is what hides the pads and draws the swipe pause button. It also
    lays out. */
@@ -4941,8 +4876,8 @@ document.addEventListener("visibilitychange",()=>{
   if(G.mode==="versus") dropOut();
   else if(!G.paused) UI.togglePause();
 });
-// The seat and the presence record are both given up here, keepalive so they go.
-addEventListener("beforeunload",()=>{ try{ Net.reset(); Who.stop(); }catch(e){} });
+// The seat is given up here, keepalive so the delete actually goes.
+addEventListener("beforeunload",()=>{ try{ Net.reset(); }catch(e){} });
 
 </script>
 </body>
