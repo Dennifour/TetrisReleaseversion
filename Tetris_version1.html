@@ -2416,22 +2416,63 @@ function waitIceGatheringComplete(pc){
   pc.addEventListener("icegatheringstatechange",check);
  });
 }
-const FB = {
+const HB_MS=5000, SEAT_TTL=20000, LOBBY_TTL=20000, SIG_TRIES=4, SIG_BASE_MS=120,
+   LEAVE_TIMEOUT_MS=2500;
+const Sig = {
  base(){ return (CFG.fbUrl||"").trim().replace(/\/+$/,""); },
  on(){ return /^https?:\/\/.+/i.test(this.base()); },
- url(path,q){ return this.base()+path+".json"+(q||""); },
- async req(path,opt,q){
-  let r;
-  try{ r=await fetch(this.url(path,q),opt); }
-  catch(e){ throw new Error(T("e_fbnet")); }                     // DNS, CORS, offline
-  if(!r.ok) throw new Error(T(r.status===401||r.status===403?"e_fbauth":"e_fbnet"));
-  const t=await r.text();
-  return t&&t!=="null" ? JSON.parse(t) : null;
+ url(p){ return this.base()+p+".json"; },
+ sleep(ms){ return new Promise(r=>setTimeout(r,ms)); },
+ // retried and awaited: a lost write is what desynchronised the old room
+ async req(path,opt,tries){
+  const n=tries==null?SIG_TRIES:tries;
+  let last=null;
+  for(let i=0;i<n;i++){
+   let r;
+   try{ r=await fetch(this.url(path),opt); }
+   catch(e){ last=new Error(T("e_fbnet")); await this.sleep(SIG_BASE_MS*(1<<i)+rnd(SIG_BASE_MS)); continue; }
+   if(r.status===412) return {conflict:true};
+   if(r.status===401||r.status===403) throw new Error(T("e_fbauth"));
+   if(!r.ok){ last=new Error(T("e_fbnet")); await this.sleep(SIG_BASE_MS*(1<<i)+rnd(SIG_BASE_MS)); continue; }
+   const t=await r.text();
+   let v=null;
+   try{ v = t&&t!=="null" ? JSON.parse(t) : null; }catch(e){ v=null; }
+   return {value:v, etag:r.headers.get("etag")};
+  }
+  throw last||new Error(T("e_fbnet"));
  },
- get(path){ return this.req(path,{cache:"no-store"}); },
- put(path,val){ return this.req(path,{method:"PUT",body:JSON.stringify(val)}); },
- patch(path,val){ return this.req(path,{method:"PATCH",body:JSON.stringify(val)}); },
- del(path){ return this.req(path,{method:"DELETE",keepalive:true}).catch(()=>null); },
+ async get(path){ return (await this.req(path,{cache:"no-store"})).value; },
+ async put(path,val){ return (await this.req(path,{method:"PUT",body:JSON.stringify(val)})).value; },
+ async patch(path,val){ return (await this.req(path,{method:"PATCH",body:JSON.stringify(val)})).value; },
+ async del(path){ await this.req(path,{method:"DELETE",keepalive:true}); },
+ // compare-and-swap: win counts were a read-modify-write on a stale snapshot
+ async cas(path,fn){
+  for(let i=0;i<SIG_TRIES;i++){
+   const r=await this.req(path,{cache:"no-store",headers:{"X-Firebase-ETag":"true"}});
+   const next=fn(r.value);
+   const w=await this.req(path,{method:"PUT",body:JSON.stringify(next),headers:{"if-match":r.etag||"*"}});
+   if(!w.conflict) return next;
+   await this.sleep(SIG_BASE_MS*(1<<i)+rnd(SIG_BASE_MS));
+  }
+  throw new Error(T("e_fbnet"));
+ },
+ stream(path,onEvent){
+  let es=null, closed=false, back=0;
+  const open=()=>{
+   if(closed) return;
+   es=new EventSource(this.url(path));
+   const on=type=>es.addEventListener(type,m=>{
+    back=0;
+    let d=null;
+    try{ d=JSON.parse(m.data); }catch(e){ return; }
+    if(d) onEvent({type, path:String(d.path||"/"), data:d.data});
+   });
+   on("put"); on("patch");
+   es.onerror=()=>{ try{ es.close(); }catch(e){} if(closed) return; setTimeout(open,Math.min(4000,SIG_BASE_MS*(1<<back++))); };
+  };
+  open();
+  return { close(){ closed=true; try{ es&&es.close(); }catch(e){} } };
+ }
 };
 const ROOM_STALE=120000;
 const ROOM_ALPHA="ACDEFGHJKLMNPQRTUVWXYZ2346789";
@@ -2483,25 +2524,25 @@ const Room = {
  inRound(p){ return !this.lastGo || (this.roster.get(p.pid)===p.j && !this.dropped.has(p.pid)); },
  alive(){ return this.players.filter(p=>!p.d && this.inRound(p)); },
  async create(){
-  if(!FB.on()) throw new Error(T("e_nofb"));
+  if(!Sig.on()) throw new Error(T("e_nofb"));
   PID=PID||roomId(8);
   const id=roomId(6);
   NET_RULE="attack";
-  await FB.put("/rooms/"+id,{h:PID, t:Date.now(), r:NET_RULE});
-  await FB.put("/rooms/"+id+"/p/"+PID,{n:CFG.name, j:Date.now(), t:Date.now(), w:0});
-  await FB.put("/lobby/"+id,{n:CFG.name, t:Date.now(), c:1});
+  await Sig.put("/rooms/"+id,{h:PID, t:Date.now(), r:NET_RULE});
+  await Sig.put("/rooms/"+id+"/p/"+PID,{n:CFG.name, j:Date.now(), t:Date.now(), w:0});
+  await Sig.put("/lobby/"+id,{n:CFG.name, t:Date.now(), c:1});
   this.begin(id,true,0);
   return id;
  },
  async join(id){
-  if(!FB.on()) throw new Error(T("e_nofb"));
+  if(!Sig.on()) throw new Error(T("e_nofb"));
   PID=PID||roomId(8);
-  const v=await FB.get("/rooms/"+id);
+  const v=await Sig.get("/rooms/"+id);
   if(!v) throw new Error(T("e_noroom"));
   const gone=Date.now()-ROOM_GONE;
   const seated=Object.keys(v.p||{}).filter(k=>((v.p[k]||{}).t||0)>gone).length;
   if(seated>=MAX_SEATS) throw new Error(T("e_roomfull"));
-  await FB.put("/rooms/"+id+"/p/"+PID,{n:CFG.name, j:Date.now(), t:Date.now(), w:0});
+  await Sig.put("/rooms/"+id+"/p/"+PID,{n:CFG.name, j:Date.now(), t:Date.now(), w:0});
   this.begin(id,false,(v.go&&v.go.at)||0);
  },
  begin(id,host,lastGo){
@@ -2521,10 +2562,10 @@ const Room = {
   this.timer=this.hb=null; this.id=null;
   this.players=[]; this.chat=[]; this.roster=new Map(); this.dropped=new Set();
   this.starting=0; this.lastPoll=0; this.cq=""; this.beatAt=0;
-  if(id && FB.on()){
-   if(host){ FB.del("/lobby/"+id); FB.del("/rooms/"+id); FB.del("/chat/"+id); }
-   else if(!gone){ FB.del("/rooms/"+id+"/p/"+PID); FB.put("/lobby/"+id+"/t",Date.now()); }
-   else FB.del("/rooms/"+id+"/p/"+PID);
+  if(id && Sig.on()){
+   if(host){ Sig.del("/lobby/"+id); Sig.del("/rooms/"+id); Sig.del("/chat/"+id); }
+   else if(!gone){ Sig.del("/rooms/"+id+"/p/"+PID); Sig.put("/lobby/"+id+"/t",Date.now()); }
+   else Sig.del("/rooms/"+id+"/p/"+PID);
   }
  },
  // full speed only during a round or when someone is ready
@@ -2537,21 +2578,21 @@ const Room = {
   if(!this.on) return;
   if(Date.now()-this.beatAt>=ROOM_HB-100){
    this.beatAt=Date.now();
-   FB.put(this.mine()+"/t",this.beatAt).catch(()=>{});
+   Sig.put(this.mine()+"/t",this.beatAt).catch(()=>{});
   }
   if(!this.host) return;
   const c=this.players.length||1;
   if(c===this.listedC && Date.now()-this.listedAt<ROOM_RELIST) return;
   this.listedC=c; this.listedAt=Date.now();
-  FB.patch("/lobby/"+this.id,{n:CFG.name, t:Date.now(), c}).catch(()=>{});
+  Sig.patch("/lobby/"+this.id,{n:CFG.name, t:Date.now(), c}).catch(()=>{});
  },
- set(k,v){ if(this.on) FB.put(this.mine()+"/"+k,v).catch(()=>{}); },
- board(b){ if(!this.on) return; this.beatAt=Date.now(); FB.patch(this.mine(),{b, t:this.beatAt}).catch(()=>{}); },
+ set(k,v){ if(this.on) Sig.put(this.mine()+"/"+k,v).catch(()=>{}); },
+ board(b){ if(!this.on) return; this.beatAt=Date.now(); Sig.patch(this.mine(),{b, t:this.beatAt}).catch(()=>{}); },
  // one PATCH: a death and its duration have to land together or the round is judged wrong
- mark(o){ if(this.on) FB.patch(this.mine(),o).catch(()=>{}); },
- pushRule(){ if(this.on&&this.host) FB.patch(this.path(),{r:NET_RULE}).catch(()=>{}); },
+ mark(o){ if(this.on) Sig.patch(this.mine(),o).catch(()=>{}); },
+ pushRule(){ if(this.on&&this.host) Sig.patch(this.path(),{r:NET_RULE}).catch(()=>{}); },
  // addressed and queued, so two attacks in one tick both land
- attack(pid,n){ if(this.on) FB.put(this.path()+"/p/"+pid+"/g/"+PID+"_"+(++this.gseq),n).catch(()=>{}); },
+ attack(pid,n){ if(this.on) Sig.put(this.path()+"/p/"+pid+"/g/"+PID+"_"+(++this.gseq),n).catch(()=>{}); },
  say(text){
   if(!this.on) return;
   const t=String(text).slice(0,120);
@@ -2559,14 +2600,14 @@ const Room = {
   const key=Date.now()+"-"+PID;
   this.chat=this.chat.concat([{key,n:CFG.name,m:t}]).slice(-CHAT_KEEP);
   UI.renderChat();
-  FB.put(this.chatPath()+"/"+key,{n:CFG.name,m:t}).catch(()=>{});
-  FB.patch(this.path(),{cq:key}).catch(()=>{});
+  Sig.put(this.chatPath()+"/"+key,{n:CFG.name,m:t}).catch(()=>{});
+  Sig.patch(this.path(),{cq:key}).catch(()=>{});
  },
  async readChat(){
   if(!this.on) return;
   const id=this.id;
   try{
-   const c=await FB.get("/chat/"+id);
+   const c=await Sig.get("/chat/"+id);
    if(!this.on||this.id!==id) return;
    this.foldChat(c);
    UI.renderChat();
@@ -2584,13 +2625,13 @@ const Room = {
    .sort((a,b)=>parseInt(a.key,10)-parseInt(b.key,10))
    .slice(-CHAT_KEEP);
   if(this.host && keys.length>CHAT_KEEP)
-   keys.slice(0,keys.length-CHAT_KEEP).forEach(k=>FB.del(this.chatPath()+"/"+k));
+   keys.slice(0,keys.length-CHAT_KEEP).forEach(k=>Sig.del(this.chatPath()+"/"+k));
  },
  callStart(){
   if(!this.host||!this.on) return;
   const seed=((Math.random()*0xffffffff)>>>0)||1;
   this.starting=now();
-  FB.put(this.path()+"/go",{s:seed,r:NET_RULE,at:Date.now()}).catch(()=>{});
+  Sig.put(this.path()+"/go",{s:seed,r:NET_RULE,at:Date.now()}).catch(()=>{});
  },
  // one GET brings the whole room back, so the request count stays flat as it fills
  async poll(){
@@ -2599,7 +2640,7 @@ const Room = {
   if(stalled) dropOut();
   this.lastPoll=now();
   try{
-   const v=await FB.get(this.path());
+   const v=await Sig.get(this.path());
    if(!this.on) return;
    if(!v||!v.p||!v.h){ UI.roomGone(); return; }
    if(!this.host && !this.starting) NET_RULE = v.r==="score" ? "score" : "attack";
@@ -2616,7 +2657,7 @@ const Room = {
     const heir=list[0];
     if(heir && heir.pid===PID && !this.host){
      this.host=true;
-     FB.put(this.path()+"/h",PID).catch(()=>{});
+     Sig.put(this.path()+"/h",PID).catch(()=>{});
     }
    }else if(this.host && v.h!==PID) this.host=false;
    if(this.lastGo)
@@ -2627,7 +2668,7 @@ const Room = {
     for(const k of Object.keys(mineRec.g)){
      const n=mineRec.g[k]|0;
      if(G && !G.over && G.mode==="versus" && n>0) G.queueGarbage(n);
-     FB.del(this.mine()+"/g/"+k);
+     Sig.del(this.mine()+"/g/"+k);
     }
    }
    const cq=String(v.cq||"");
@@ -2804,13 +2845,13 @@ const Net = {
   this.armWatchdog(45000);
  },
  async listRooms(){
-  if(!FB.on()) throw new Error(T("e_nofb"));
-  const idx=await FB.get("/lobby");
+  if(!Sig.on()) throw new Error(T("e_nofb"));
+  const idx=await Sig.get("/lobby");
   const out=[];
   const t0=Date.now();                    // not `now`, which is the clock helper
   for(const id in (idx||{})){
    const r=idx[id]||{};
-   if(t0-(r.t||0)>ROOM_STALE) { FB.del("/lobby/"+id); FB.del("/rooms/"+id); FB.del("/chat/"+id); continue; }
+   if(t0-(r.t||0)>ROOM_STALE) { Sig.del("/lobby/"+id); Sig.del("/rooms/"+id); Sig.del("/chat/"+id); continue; }
    out.push({id, name:String(r.n||"").slice(0,12), count:r.c|0});
   }
   return out;
