@@ -6,7 +6,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This repository is a single-file Tetris implementation: `Tetris_version1.html`. There is no build system, package manager, or test suite — HTML, CSS, and JavaScript all live in this one file (~3,600 lines) and it runs by opening it directly in a browser.
 
-**The file has a hard size budget: it must stay under 150 KB.** It currently sits just under that, which is why the in-file comments are terse one-liners and the CSS ships whitespace-collapsed. Long-form design rationale belongs *here*, in `CLAUDE.md`, not in the shipped file — this document is the archive for the "why", and the architecture sections below carry the reasoning that used to live in code comments. Check `ls -l Tetris_version1.html` after any sizable addition.
+**The file has a size budget: 150 KB was the target; it currently sits at ~156 KB** after a round of correctness fixes that cost more than the entire comment budget was worth (stripping *every* comment only reaches 151 KB). Getting back under 150 KB now means dropping a feature or flattening the source, so treat the number as a pressure, not a hard gate, and check `ls -l Tetris_version1.html` after any sizable addition.
+
+That budget is why the in-file comments are terse one-liners and the CSS ships whitespace-collapsed. Long-form design rationale belongs *here*, in `CLAUDE.md`, not in the shipped file — this document is the archive for the "why", and the architecture sections below carry the reasoning that used to live in code comments.
 
 ## Development workflow
 
@@ -69,6 +71,15 @@ Two connection paths, both peer-to-peer over WebRTC `RTCPeerConnection`/`DataCha
 - **Clear animation**: the board collapses immediately so the next piece has real ground, but `clearing.board` holds a snapshot with only the cleared rows blanked, drawn for `CLEAR_MS` so the drop reads as a beat. Nothing reads it back — it is scenery.
 - **Countdown**: `COUNT`/`startHoldEnd` are read off the wall clock, not frames, so a throttled tab can't stretch them; `G.startedAt` is held at "now" throughout, so `lasted()` measures play and not the wait.
 - **Board give**: `FX.bump()`/`FX.thud()` drive two different springs (`BOB_STIFF`/`BOB_DAMP` for the fall, `BOB_UP_*` for the slower return) — the asymmetry is the point; a symmetric spring reads as a twitch. Measured in cells, so the feel is size-independent.
+
+### Things that were broken once and are easy to break again
+- **Lifecycle races**: `dropBoard()` holds its pending timer in `boardDrop` and checks the well it was armed for is still on screen; `startGame()` clears it. Without both, quitting and starting again inside `BOARD_FADE_MS` let the old timer null the *new* run and the board went blank.
+- **Armed listeners**: a rebind row parks `BINDING`/`Pad.watching` on the next key or button. `UI.leaving()` (called from `show()` on every screen change) disarms them via `cancelBind()`. Left armed, the next key pressed anywhere — mid-game included — was silently rebound.
+- **Anything off the wire is untrusted**: `queueGarbage()` caps a single message at `COLS*2` rows and `fitBoard()` cuts or pads a peer board to `COLS*VIS_ROWS`. A peer once queued a billion garbage lines.
+- **User text needs `overflow-wrap`**: chat bubbles, seat names and room names all carry break/ellipsis rules. One 120-character run with no spaces used to push the room screen ~750px off the side of a phone.
+- **Grid tracks need `minmax(0,1fr)`**: a plain `1fr` keeps its automatic minimum, so a long name widened the row instead of ellipsing inside it.
+- **Canvas labels need room**: `solveWell()` sizes the gap between stacked opponent boards to fit the name drawn under each one, and `drawSide()` measures its available width from `rx`, not the whole column.
+- **Scheduled sounds outlive their run**: `Sfx` gates its queued notes on a generation that `Sfx.hush()` bumps, called from `startGame()` and `dropBoard()`.
 
 ### Input
 - Every control path (keyboard, gamepad, on-screen pad, swipe gestures) funnels through `Input.press`/`Input.release` — that single door is where the countdown and a finished run are locked out. Don't call `Game` methods directly from a new input source.

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#05060f">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -25,6 +25,14 @@ body.playing #bg{opacity:var(--bg-bright,.45)}
 .topbtn:active{color:var(--fg)}
 .topbtn svg{width:100%;height:100%;display:block}
 .topbtn path{fill:none;stroke:currentColor;stroke-width:2.1;stroke-linecap:round;stroke-linejoin:round}
+@media (pointer:coarse){
+.mi{padding-block:10px}
+.mi.ghost{padding-block:9px}
+.topbtn{width:clamp(28px,5vmin,34px);height:clamp(28px,5vmin,34px)}
+.sw{width:48px;height:28px}
+.sw::after{width:20px;height:20px}
+.sw.on::after{transform:translateX(20px)}
+}
 .pausebtn{display:none}
 body.swipe.playing .pausebtn,body.notouch.playing .pausebtn{display:grid}
 #fsbtn[hidden]{display:none}
@@ -38,6 +46,7 @@ body.port.swap #stage{grid-template-areas:"screen screen" "actions dpad"}
 #dpad-wrap,#act-wrap{opacity:0;visibility:hidden;transition:opacity .17s ease,visibility 0s .17s}
 body.swipe #dpad-wrap,body.swipe #act-wrap,body.notouch #dpad-wrap,body.notouch #act-wrap{display:none}
 body.playing #dpad-wrap,body.playing #act-wrap{opacity:1;visibility:visible;transition:opacity .26s ease .25s}
+body.over #dpad-wrap,body.over #act-wrap,body.over .pausebtn{opacity:0;visibility:hidden}
 body.swap #dpad-wrap{transform:translate(var(--shift-x,0px),var(--shift-y,0px))}
 body.swap #act-wrap{transform:translate(calc(var(--shift-x,0px) * -1),var(--shift-y,0px))}
 .pad{display:flex;flex-direction:column;align-items:center;gap:calc(var(--gap)*.85);width:100%;min-width:0}
@@ -120,17 +129,18 @@ input.tf:focus,textarea.tf:focus{outline:none;color:var(--fg);border-color:var(-
 .bindrow{cursor:pointer;transition:background .12s;border-radius:8px}
 .bindrow b{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;letter-spacing:.06em}
 .bindrow.binding b{color:var(--danger)}
-.bindrow:active{background:var(--surface)}
+.bindrow:active,.bindrow:focus-visible{background:var(--surface);outline:none}
+.bindrow:focus-visible,.room-row:focus-visible,.chat-send:focus-visible,.sw:focus-visible{box-shadow:0 0 0 2px var(--fg);outline:none}
 @media (hover:hover){.bindrow:hover{background:var(--surface)}
 }
-#on-list{display:grid}
+#on-list{display:grid;grid-template-columns:minmax(0,1fr)}
 #on-list.has-rooms{border:1px solid var(--line);border-radius:var(--radius-sm,10px);overflow:hidden}
-.room-row{display:flex;align-items:center;justify-content:space-between;gap:16px;width:100%;text-align:left;background:none;border:0;border-top:1px solid var(--line);padding:14px 18px;color:var(--fg);font-family:inherit;cursor:pointer}
+.room-row{min-width:0;display:flex;align-items:center;justify-content:space-between;gap:16px;width:100%;text-align:left;background:none;border:0;border-top:1px solid var(--line);padding:14px 18px;color:var(--fg);font-family:inherit;cursor:pointer}
 #on-list.has-rooms .room-row:first-child{border-top:0}
 .room-row:active{background:var(--surface)}
 @media (hover:hover){.room-row:hover{background:var(--surface)}
 }
-.room-row .nm{font-size:15px;font-weight:700}
+.room-row .nm{min-width:0;flex:1 1 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:15px;font-weight:700}
 .room-row .sub{font-size:12.5px;color:var(--fg-faint);font-variant-numeric:tabular-nums;white-space:nowrap}
 .netstat{font-size:11.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--fg-faint);margin-top:18px;line-height:1.5}
 .netstat b{color:var(--fg);font-weight:600}
@@ -152,7 +162,7 @@ input.tf:focus,textarea.tf:focus{outline:none;color:var(--fg);border-color:var(-
 #v-set input.tf,#v-set textarea.tf{font-size:14.5px}
 #v-set .netstat{font-size:13px}
 #v-set .diag{font-size:12.5px}
-.sw{width:42px;height:24px;border-radius:999px;background:var(--surface);border:1px solid var(--line);position:relative;cursor:pointer;flex:0 0 auto;transition:background .12s,border-color .12s}
+.sw{-webkit-appearance:none;appearance:none;padding:0;margin:0;width:42px;height:24px;border-radius:999px;background:var(--surface);border:1px solid var(--line);position:relative;cursor:pointer;flex:0 0 auto;transition:background .12s,border-color .12s}
 .sw::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:var(--fg-faint);transition:transform .12s,background .12s}
 .sw.on{border-color:var(--fg)}
 .sw.on::after{transform:translateX(18px);background:var(--fg)}
@@ -210,18 +220,18 @@ html[lang=ko] .fold summary h3{letter-spacing:.02em}
 #v-room .card{width:100%;max-width:none;display:flex;flex-direction:column;gap:16px}
 .dash-head{display:flex;align-items:center;gap:16px 24px;flex-wrap:wrap}
 .dash-head .hint{margin:0;flex:1 1 220px}
-.dash-grid{display:grid;gap:16px;grid-template-columns:1fr;min-height:0}
+.dash-grid{display:grid;gap:16px;grid-template-columns:minmax(0,1fr);min-height:0}
 .dash-panel{display:flex;flex-direction:column;gap:10px;min-width:0;border:1px solid var(--line);border-radius:var(--radius-sm,10px);background:var(--surface);padding:14px}
 .panel-label{flex:0 0 auto;font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--fg-faint)}
-.seat-grid{display:grid;gap:6px;grid-template-columns:1fr}
-.seat-row{display:flex;align-items:center;justify-content:space-between;gap:12px;border:1px solid var(--line);border-radius:var(--radius-sm,10px);padding:8px 12px;background:var(--bg)}
+.seat-grid{display:grid;gap:6px;grid-template-columns:minmax(0,1fr)}
+.seat-row{min-width:0;display:flex;align-items:center;justify-content:space-between;gap:12px;border:1px solid var(--line);border-radius:var(--radius-sm,10px);padding:8px 12px;background:var(--bg)}
 .seat-row.mine{border-color:var(--line-strong)}
 .seat-row.ready{border-color:#4fe0a8}
 .seat-row.battling{border-color:#5fb0ff}
 .seat-row.spectating{opacity:.6}
 .seat-row .w{font-size:14px;font-weight:700;font-variant-numeric:tabular-nums}
 .seat-row .w small{margin-left:5px;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--fg-faint);font-weight:600}
-.seat-row .nm{font-size:12.5px;font-weight:600;color:var(--fg-dim)}
+.seat-row .nm{min-width:0;flex:1 1 auto;font-size:12.5px;font-weight:600;color:var(--fg-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .seat-row.ready .nm{color:#4fe0a8}
 .seat-row.battling .nm{color:#5fb0ff}
 .match-panel .row{width:100%}
@@ -233,23 +243,24 @@ html[lang=ko] .fold summary h3{letter-spacing:.02em}
 #b-ready.on::after,#b-ready:active::after,#b-spectate.on::after,#b-spectate:active::after{opacity:0}
 .room-chat{padding:0;overflow:hidden;height:320px}
 .room-chat .panel-label{padding:12px 16px;border-bottom:1px solid var(--line)}
-.chat-log{flex:1 1 auto;min-height:0;overflow-y:auto;padding:14px 18px;display:flex;flex-direction:column;gap:10px}
-.chat-log .empty{margin:auto;color:var(--fg-faint);font-size:13px}
+.chat-log{flex:1 1 auto;min-width:0;min-height:0;overflow-x:hidden;overflow-y:auto;padding:14px 18px;display:flex;flex-direction:column;gap:10px}
+.chat-log .empty,.seat-grid .empty{margin:auto;color:var(--fg-faint);font-size:13px}
+.seat-grid .empty{grid-column:1/-1;padding:6px 2px}
 .chat-log .msg{max-width:80%}
 .chat-log .msg.mine{align-self:flex-end;text-align:right}
-.chat-log .msg .who{font-size:11px;font-weight:700;color:var(--fg-faint);margin-bottom:3px}
-.chat-log .msg .txt{display:inline-block;font-size:14px;line-height:1.4;background:var(--bg);border-radius:12px;padding:8px 12px}
+.chat-log .msg .who{font-size:11px;font-weight:700;color:var(--fg-faint);margin-bottom:3px;overflow-wrap:anywhere}
+.chat-log .msg .txt{display:inline-block;max-width:100%;font-size:14px;line-height:1.4;background:var(--bg);border-radius:12px;padding:8px 12px;overflow-wrap:anywhere;word-break:break-word}
 .chat-log .msg.mine .txt{background:#fff;color:#0a0a0c}
 .room-chat .chat-compose{display:flex;gap:8px;flex:0 0 auto;padding:12px;border-top:1px solid var(--line)}
 .room-chat .chat-compose input.tf{flex:1 1 auto}
 .chat-send{flex:0 0 auto;width:44px;height:44px;border-radius:var(--radius-sm,10px);border:1px solid var(--line);background:var(--surface);color:var(--fg-dim);display:grid;place-items:center;cursor:pointer}
 .chat-send svg{width:17px;height:17px;fill:currentColor}
 .chat-send:hover{color:var(--fg);border-color:var(--line-strong)}
-@media (min-width:760px){.dash-grid{grid-template-columns:1fr 1fr;grid-template-rows:auto auto;grid-template-areas:"seats match" "chat match"}
+@media (min-width:760px){.dash-grid{grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-rows:auto auto;grid-template-areas:"seats match" "chat match"}
 .seats-panel{grid-area:seats}
 .match-panel{grid-area:match;justify-content:center}
 .room-chat{grid-area:chat}
-.seat-grid{grid-template-columns:1fr 1fr}
+.seat-grid{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
 }
 @media (prefers-reduced-motion:reduce){.veil,.mi,.mi::after{transition-duration:.01ms;transition-delay:0s}
 .panel.on{animation-duration:.01ms}
@@ -270,8 +281,8 @@ html[lang=ko] .fold summary h3{letter-spacing:.02em}
  </button>
 </div>
 <div id="bg"></div>
-<div id="stage">
- <div id="screen"><canvas id="cv"></canvas></div>
+<div id="stage" role="main">
+ <div id="screen"><canvas id="cv" role="img" data-i18n-aria="a11y_board"></canvas></div>
  <div id="dpad-wrap" class="pad">
   <div class="dpad">
    <svg class="dcross" viewBox="0 0 100 100" aria-hidden="true" focusable="false">
@@ -402,7 +413,7 @@ html[lang=ko] .fold summary h3{letter-spacing:.02em}
   <textarea class="tf" id="j-in" data-i18n-ph="ph_host"></textarea>
   <div class="menu mt8"><button class="mi" id="j-go" data-i18n="join_make"></button></div>
   <h3 data-i18n="join_s2"></h3>
-  <textarea class="tf" id="j-out" readonly placeholder="—"></textarea>
+  <textarea class="tf" id="j-out" readonly data-i18n-ph="ph_gen"></textarea>
   <div class="menu mt8"><button class="mi" id="j-copy" data-i18n="join_copy"></button></div>
   <div class="netstat"><span data-i18n="status"></span> <b class="wait" id="js">—</b></div>
   <p class="diag" id="j-diag"></p>
@@ -450,16 +461,16 @@ html[lang=ko] .fold summary h3{letter-spacing:.02em}
  <div class="card">
   <div class="split" id="set-split">
    <button class="mi ghost panel-back" type="button" id="set-panelback">&larr; <span data-i18n="c_settings"></span></button>
-   <div class="menu rail" id="set-rail">
-    <button class="mi nav on" data-tab="general"><span data-i18n="c_general"></span></button>
-    <button class="mi nav" data-tab="video"><span data-i18n="c_video"></span></button>
-    <button class="mi nav" data-tab="audio"><span data-i18n="c_audio"></span></button>
-    <button class="mi nav" data-tab="controls"><span data-i18n="c_controls"></span></button>
-    <button class="mi nav" data-tab="online"><span data-i18n="c_net"></span></button>
+   <div class="menu rail" id="set-rail" role="tablist">
+    <button class="mi nav on" data-tab="general" role="tab" aria-selected="true" aria-controls="panel-general"><span data-i18n="c_general"></span></button>
+    <button class="mi nav" data-tab="video" role="tab" aria-selected="false" aria-controls="panel-video"><span data-i18n="c_video"></span></button>
+    <button class="mi nav" data-tab="audio" role="tab" aria-selected="false" aria-controls="panel-audio"><span data-i18n="c_audio"></span></button>
+    <button class="mi nav" data-tab="controls" role="tab" aria-selected="false" aria-controls="panel-controls"><span data-i18n="c_controls"></span></button>
+    <button class="mi nav" data-tab="online" role="tab" aria-selected="false" aria-controls="panel-online"><span data-i18n="c_net"></span></button>
     <button class="mi nav ghost mt16" data-back="1" data-i18n="back"></button>
    </div>
    <div class="panel-area">
-    <section class="panel on" data-panel="general" role="tabpanel">
+    <section class="panel on" data-panel="general" role="tabpanel" id="panel-general">
      <h3 data-i18n="set_lang"></h3>
      <div class="row" id="langrow">
       <button class="mi ctr lang" data-lang="en">English</button>
@@ -469,32 +480,32 @@ html[lang=ko] .fold summary h3{letter-spacing:.02em}
      <input class="tf box" id="s-name" maxlength="12" data-i18n-ph="ph_name">
      <p class="hint" data-i18n="set_id_hint"></p>
     </section>
-    <section class="panel" data-panel="video" role="tabpanel">
+    <section class="panel" data-panel="video" role="tabpanel" id="panel-video">
      <h3 data-i18n="set_pres"></h3>
      <div class="opts">
-      <div class="sp"><span data-i18n="set_ghost"></span><div class="sw on" id="s-ghost"></div></div>
-      <div class="sp"><span data-i18n="set_grid"></span><div class="sw on" id="s-grid"></div></div>
-      <div class="sp"><span data-i18n="set_bob"></span><div class="sw on" id="s-bob"></div></div>
-      <div class="sp rng"><span><span data-i18n="set_boardsize"></span><small id="l-boardsize"></small></span><input type="range" id="s-boardsize" min="40" max="100" step="5"></div>
+      <div class="sp"><span data-i18n="set_ghost"></span><button type="button" role="switch" aria-checked="false" class="sw on" id="s-ghost"></button></div>
+      <div class="sp"><span data-i18n="set_grid"></span><button type="button" role="switch" aria-checked="false" class="sw on" id="s-grid"></button></div>
+      <div class="sp"><span data-i18n="set_bob"></span><button type="button" role="switch" aria-checked="false" class="sw on" id="s-bob"></button></div>
+      <div class="sp rng"><span><span data-i18n="set_boardsize"></span><small id="l-boardsize"></small></span><input type="range" data-i18n-aria="set_boardsize" id="s-boardsize" min="40" max="100" step="5"></div>
      </div>
      <h3 data-i18n="set_tiles"></h3>
      <p class="hint" data-i18n="set_tiles_hint"></p>
      <div class="opts tiles" id="tile-rows"></div>
     </section>
-    <section class="panel" data-panel="audio" role="tabpanel">
+    <section class="panel" data-panel="audio" role="tabpanel" id="panel-audio">
      <h3 data-i18n="set_sound"></h3>
      <div class="opts">
-      <div class="sp"><span data-i18n="set_snd"></span><div class="sw on" id="s-snd"></div></div>
-      <div class="sp rng"><span><span data-i18n="set_vol"></span><small id="l-vol"></small></span><input type="range" id="s-vol" min="0" max="100" step="5"></div>
+      <div class="sp"><span data-i18n="set_snd"></span><button type="button" role="switch" aria-checked="false" class="sw on" id="s-snd"></button></div>
+      <div class="sp rng"><span><span data-i18n="set_vol"></span><small id="l-vol"></small></span><input type="range" data-i18n-aria="set_vol" id="s-vol" min="0" max="100" step="5"></div>
      </div>
      <p class="hint" data-i18n="set_sound_hint"></p>
     </section>
-    <section class="panel" data-panel="controls" role="tabpanel">
+    <section class="panel" data-panel="controls" role="tabpanel" id="panel-controls">
      <h3 data-i18n="set_handling"></h3>
      <div class="opts">
-      <div class="sp rng"><span><span data-i18n="set_das"></span><small id="l-das"></small></span><input type="range" id="s-das" min="40" max="400" step="10"></div>
-      <div class="sp rng"><span><span data-i18n="set_arr"></span><small id="l-arr"></small></span><input type="range" id="s-arr" min="0" max="160" step="5"></div>
-      <div class="sp rng"><span><span data-i18n="set_sdf"></span><small id="l-sdf"></small></span><input type="range" id="s-sdf" min="2" max="40" step="1"></div>
+      <div class="sp rng"><span><span data-i18n="set_das"></span><small id="l-das"></small></span><input type="range" data-i18n-aria="set_das" id="s-das" min="40" max="400" step="10"></div>
+      <div class="sp rng"><span><span data-i18n="set_arr"></span><small id="l-arr"></small></span><input type="range" data-i18n-aria="set_arr" id="s-arr" min="0" max="160" step="5"></div>
+      <div class="sp rng"><span><span data-i18n="set_sdf"></span><small id="l-sdf"></small></span><input type="range" data-i18n-aria="set_sdf" id="s-sdf" min="2" max="40" step="1"></div>
      </div>
      <details class="fold" id="fold-touch">
      <summary><h3 data-i18n="c_touch"></h3></summary>
@@ -507,18 +518,18 @@ html[lang=ko] .fold summary h3{letter-spacing:.02em}
      <p class="hint" id="touch-hint"></p>
      <div id="swipe-opts" hidden>
       <div class="opts">
-       <div class="sp rng"><span><span data-i18n="set_swmove"></span><small id="l-swmove"></small></span><input type="range" id="s-swmove" min="30" max="160" step="5"></div>
-       <div class="sp rng"><span><span data-i18n="set_swdrop"></span><small id="l-swdrop"></small></span><input type="range" id="s-swdrop" min="30" max="160" step="5"></div>
-       <div class="sp rng"><span><span data-i18n="set_swflick"></span><small id="l-swflick"></small></span><input type="range" id="s-swflick" min="40" max="260" step="10"></div>
+       <div class="sp rng"><span><span data-i18n="set_swmove"></span><small id="l-swmove"></small></span><input type="range" data-i18n-aria="set_swmove" id="s-swmove" min="30" max="160" step="5"></div>
+       <div class="sp rng"><span><span data-i18n="set_swdrop"></span><small id="l-swdrop"></small></span><input type="range" data-i18n-aria="set_swdrop" id="s-swdrop" min="30" max="160" step="5"></div>
+       <div class="sp rng"><span><span data-i18n="set_swflick"></span><small id="l-swflick"></small></span><input type="range" data-i18n-aria="set_swflick" id="s-swflick" min="40" max="260" step="10"></div>
        <div class="full row"><button class="mi ghost" id="b-swreset" data-i18n="set_swreset"></button></div>
       </div>
      </div>
      <div id="dpad-opts">
       <div class="opts">
-       <div class="sp"><span><span data-i18n="set_swap"></span><small data-i18n="set_swap_s"></small></span><div class="sw" id="s-swap"></div></div>
-       <div class="sp rng"><span><span data-i18n="set_btnsize"></span><small id="l-btn"></small></span><input type="range" id="s-btn" min="70" max="140" step="5"></div>
-       <div class="sp rng"><span><span data-i18n="set_btny"></span><small id="l-bty"></small></span><input type="range" id="s-bty" min="-100" max="100" step="10"></div>
-       <div class="sp rng"><span><span data-i18n="set_btnx"></span><small id="l-btx"></small></span><input type="range" id="s-btx" min="-100" max="100" step="10"></div>
+       <div class="sp"><span><span data-i18n="set_swap"></span><small data-i18n="set_swap_s"></small></span><button type="button" role="switch" aria-checked="false" class="sw" id="s-swap"></button></div>
+       <div class="sp rng"><span><span data-i18n="set_btnsize"></span><small id="l-btn"></small></span><input type="range" data-i18n-aria="set_btnsize" id="s-btn" min="70" max="140" step="5"></div>
+       <div class="sp rng"><span><span data-i18n="set_btny"></span><small id="l-bty"></small></span><input type="range" data-i18n-aria="set_btny" id="s-bty" min="-100" max="100" step="10"></div>
+       <div class="sp rng"><span><span data-i18n="set_btnx"></span><small id="l-btx"></small></span><input type="range" data-i18n-aria="set_btnx" id="s-btx" min="-100" max="100" step="10"></div>
        <div class="full row"><button class="mi ghost" id="b-ctlreset" data-i18n="set_ctlreset"></button></div>
       </div>
      </div>
@@ -536,7 +547,7 @@ html[lang=ko] .fold summary h3{letter-spacing:.02em}
       <summary><h3 data-i18n="c_pad"></h3></summary>
       <div class="foldbody">
       <div class="opts">
-       <div class="sp"><span><span data-i18n="set_paduse"></span><small id="pad-state"></small></span><div class="sw" id="s-padon"></div></div>
+       <div class="sp"><span><span data-i18n="set_paduse"></span><small id="pad-state"></small></span><button type="button" role="switch" aria-checked="false" class="sw" id="s-padon"></button></div>
       </div>
       <div class="opts lined" id="padlist"></div>
       <p class="hint" data-i18n="set_padbind_hint"></p>
@@ -544,7 +555,7 @@ html[lang=ko] .fold summary h3{letter-spacing:.02em}
       </div>
      </details>
     </section>
-    <section class="panel" data-panel="online" role="tabpanel">
+    <section class="panel" data-panel="online" role="tabpanel" id="panel-online">
      <h3 data-i18n="set_sig"></h3>
      <input class="tf box" id="s-fb" autocapitalize="off" autocomplete="off" spellcheck="false" data-i18n-ph="ph_fb">
      <p class="hint" data-i18n="set_sig_hint"></p>
@@ -685,6 +696,7 @@ const I18N = {
  b_send:["SEND {n}","공격 {n}"],
  b_sendto:["{n} TO {who}","{who}에게 {n}줄"],
  b_tspin:["T-SPIN","T스핀"],
+ a11y_board:["Tetris board","테트리스 보드"],
  back:["BACK","뒤로"],
  btn_full:["Fullscreen","전체화면"],
  btn_hold:["HOLD","홀드"],
@@ -804,6 +816,7 @@ const I18N = {
  rec_wins:["VERSUS WINS","대전 승리"],
  room_alone:["A match needs two. Invite someone to join.","대전은 2명부터 시작합니다. 친구를 초대하세요."],
  room_battling:["IN BATTLE","대전 중"],
+ room_empty:["Nobody here yet.","아직 아무도 없습니다."],
  room_hint:["The match starts as soon as you are both ready.","두 사람이 모두 준비하면 바로 시작합니다."],
  room_hint_n:["{n} in the room. Everyone readies up, then it starts. Up to four.","방에 {n}명. 모두 준비하면 시작합니다. 최대 4명."],
  room_leave:["LEAVE","나가기"],
@@ -859,6 +872,10 @@ const I18N = {
  set_swipe_s:["No buttons: drag sideways to move, drag down to soft drop, flick down to hard drop, drag up to hold, tap to rotate.","버튼 없이 조작합니다. 좌우로 끌면 이동, 아래로 끌면 소프트 드롭, 아래로 튕기면 하드 드롭, 위로 끌면 홀드, 탭하면 회전."],
  set_swmove:["Drag to move one cell","한 칸 이동 거리"],
  set_swreset:["RESET SENSITIVITY","감도 초기화"],
+ e_tile_read:["That image could not be read.","이미지를 읽을 수 없습니다."],
+ e_tile_room:["No room left in storage — clear a tile and try again.","저장 공간이 부족합니다. 타일을 지우고 다시 시도하세요."],
+ e_tile_type:["That file is not an image.","이미지 파일이 아닙니다."],
+ set_tile_clearall:["clear all","모두 지우기"],
  set_tile_reset:["reset","초기화"],
  set_tile_upload:["upload","업로드"],
  set_tiles:["Tetromino tiles","테트로미노 타일"],
@@ -916,9 +933,12 @@ function applyLang(){
   if(UI.cur==="#v-set") UI.openTab(TAB);
  }
  if(typeof repaintSettings==="function") repaintSettings();
+ if(typeof tileNote==="function") tileNote();   // re-render in the new language
 }
 const Sfx = (()=>{
- let ac=null, master=null;
+ let ac=null, master=null, gen=0;
+ // a clear or a K.O. schedules its notes ahead; quitting the run cancels them
+ const later=(fn,ms)=>{ const g=gen; setTimeout(()=>{ if(g===gen) fn(); },ms); };
  const level = () => .20*clamp(CFG.vol,0,100)/100;
  function ctx(){
   if(!ac){
@@ -955,6 +975,7 @@ const Sfx = (()=>{
  }
  return {
   unlock(){ try{ctx();}catch(e){} },
+  hush(){ gen++; },
   setVol(){ if(master) master.gain.value=level(); },
   move(){ blip(300,.035,"square",.28); },
   rotate(){ blip(460,.045,"square",.32); },
@@ -962,13 +983,13 @@ const Sfx = (()=>{
   hold(){ blip(620,.07,"sine",.4,140); },
   clear(n){
    const base=[0,523,587,659,784][n]||523;
-   [0,1,2].forEach((i)=>setTimeout(()=>blip(base*Math.pow(1.26,i),.14,"sine",.42+n*.06),i*38));
+   [0,1,2].forEach((i)=>later(()=>blip(base*Math.pow(1.26,i),.14,"sine",.42+n*.06),i*38));
    if(n>=4) noise(.3,.4);
   },
-  tspin(){ [0,1,2,3].forEach(i=>setTimeout(()=>blip(392*Math.pow(1.19,i),.11,"sawtooth",.3),i*45)); },
+  tspin(){ [0,1,2,3].forEach(i=>later(()=>blip(392*Math.pow(1.19,i),.11,"sawtooth",.3),i*45)); },
   garbage(){ noise(.22,.5); blip(90,.16,"square",.35,-30); },
-  ko(){ [0,1,2,3,4].forEach(i=>setTimeout(()=>blip(880/Math.pow(1.22,i),.18,"sawtooth",.4),i*60)); },
-  win(){ [523,659,784,1046].forEach((f,i)=>setTimeout(()=>blip(f,.24,"sine",.5),i*110)); },
+  ko(){ [0,1,2,3,4].forEach(i=>later(()=>blip(880/Math.pow(1.22,i),.18,"sawtooth",.4),i*60)); },
+  win(){ [523,659,784,1046].forEach((f,i)=>later(()=>blip(f,.24,"sine",.5),i*110)); },
   count(){ blip(440,.09,"sine",.3); },
   go(){ blip(880,.18,"sine",.45,140); },
   ui(){ blip(700,.03,"sine",.22); }
@@ -1179,9 +1200,8 @@ class Game {
   if(this.over||this.holdUsed||this.clearing) return false;
   const swap=this.hold;
   this.hold=this.cur.t;
-  this.holdUsed=true;
-  if(swap) this.spawn(swap); else this.spawn();
-  this.holdUsed=true;
+  this.spawn(swap||undefined);
+  this.holdUsed=true;      // set after spawn(), which clears it for the new piece
   return true;
  }
  ghostY(){
@@ -1261,6 +1281,7 @@ class Game {
   let label = spin ? EN(spin==="mini"?"b_mini":"b_tspin") : (n===4 ? EN("b_quad") : "");
   if(willBeEmpty) label=EN("b_pc");
   if(label) this.events.push({e:"text",text:label,kind: willBeEmpty?"pc" : (n===4||spin) ? "big":"norm"});
+  if(this.events.length>64) this.events.splice(0,this.events.length-64);   // a drain that stalls must not grow this forever
   if(this.b2b>0) this.events.push({e:"text",text:EN("b_b2b",{n:this.b2b}),kind:"b2b"});
   if(this.combo>0) this.events.push({e:"text",text:EN("b_combo",{n:this.combo}),kind:"combo"});
   if(n===4) this.stats.quad++;
@@ -1289,6 +1310,7 @@ class Game {
   this.spawn();
  }
  queueGarbage(lines){
+  lines=Math.min(lines|0,COLS*2);   // a peer message is not trusted to be sane
   if(lines<=0||this.over||!this.attacks) return;
   this.attackRecv+=lines;
   this.pendingGarbage.push({lines, at:now()});
@@ -1313,12 +1335,11 @@ class Game {
    this.board.shift();
    this.board.push(row);
   }
-  while(this.collides(this.cur.x,this.cur.y,this.cur.r) && this.cur.y>-2) this.cur.y--;
   Sfx.garbage();
   this.events.push({e:"garbage",lines:total});
  }
- die(){ if(this.over) return; this.over=true; this.endedAt=now(); this.events.push({e:"dead"}); Sfx.ko(); }
- win(){ if(this.over) return; this.over=true; this.won=true; this.endedAt=now(); this.events.push({e:"win"}); Sfx.win(); }
+ die(){ if(this.over) return; this.over=true; this.clearing=null; this.endedAt=now(); this.events.push({e:"dead"}); Sfx.ko(); }
+ win(){ if(this.over) return; this.over=true; this.won=true; this.clearing=null; this.endedAt=now(); this.events.push({e:"win"}); Sfx.win(); }
  // a duration measured on one machine, so it compares without sharing a clock
  lasted(){ return Math.max(0, Math.round((this.endedAt||now())-this.startedAt)); }
  outlasted(){ if(this.won) return; this.won=true; Sfx.win(); }
@@ -1408,9 +1429,13 @@ function solveWell(W,H,foes,below){
   const oc=cell, ow=oc*10;
   opps.push({x:x+bw+colW+gut*1.6,y,w:ow,h:oc*20,cell:oc});
  }else if(beside){
-  const stackGut=gut*0.8;
-  const slotH=(bh-(foes-1)*stackGut)/foes, oc=slotH/20, ow=oc*10;
+  // the gap has to hold each board's name label, or it lands on the board
+  // below; label size follows board width follows gutter, so two passes
   const ox=x+bw+colW+gut*1.6;
+  const labelFor=c=>Math.min(Math.max(9,cell*0.42), c*10*0.115)*1.35;
+  let oc=(bh-(foes-1)*gut*0.8)/foes/20;
+  for(let i=0;i<2;i++) oc=(bh-(foes-1)*Math.max(gut*0.8,labelFor(oc)))/foes/20;
+  const stackGut=Math.max(gut*0.8,labelFor(oc)), ow=oc*10;
   let oy=y;
   for(let i=0;i<foes;i++){ opps.push({x:ox,y:oy,w:ow,h:oc*20,cell:oc}); oy+=oc*20+stackGut; }
  }else if(foes){
@@ -1668,7 +1693,9 @@ function drawSpeedBar(g){
  if(!g.limit) return;
  const b=L.fuse, p=clamp(g.fuse/g.limit,0,1);
  ctx.strokeStyle=INK.line; ctx.lineWidth=1;
- ctx.strokeRect(b.x-.5,b.y-.5,b.w+1,b.h+1);
+ // on the pixel grid, not straddling it: a half-pixel rect blurs into two rows
+ const q=v=>Math.round(v*DPR)/DPR+0.5/DPR;
+ ctx.strokeRect(q(b.x),q(b.y),Math.round(b.w),Math.round(b.h));
  if(p<=0) return;
  ctx.fillStyle = p<=0.34 ? INK.danger : INK.dim;
  ctx.fillRect(b.x,b.y,b.w*p,b.h);
@@ -1701,9 +1728,10 @@ function drawHold(g){
  const b=L.hold;
  caption(b,T("g_hold"));
  if(g.hold){
+  ctx.save();
   ctx.globalAlpha=g.holdUsed?0.28:1;
   preview(g.hold,b.x+b.w/2,b.y+L.cell*1.15+(b.h-L.cell*1.15)/2,L.tile);
-  ctx.globalAlpha=1;
+  ctx.restore();
  }
 }
 const CLEAR_FONT=s=>`600 ${s}px ${CANVAS_FONT}`;
@@ -1767,7 +1795,9 @@ function drawOpponent(opp,i,g){
  const sz=Math.min(TS(0.42),b.w*0.115);
  const nmY=b.y+b.h+sz*0.95;
  const race=!!(g&&g.clock);
- textFit(nm,b.x,nmY,sz,INK.faint,"left",600,sz*0.1,b.w*(race?0.56:1));
+ // short of the full board width, so a name never runs up against the label
+ // of the board sitting beside it
+ textFit(nm,b.x,nmY,sz,INK.faint,"left",600,sz*0.1,b.w*(race?0.56:0.92));
  if(race) textFit(((opp&&opp.score)|0).toLocaleString(),b.x+b.w,nmY,sz,INK.dim,"right",600,0,b.w*0.42);
  if(opp&&opp.dead){
   ctx.fillStyle="rgba(10,10,12,.86)"; ctx.fillRect(b.x,b.y,b.w,b.h);
@@ -1791,15 +1821,17 @@ function drawSide(g){
  const drop=valSz*1.05;
  const pitch=Math.min(keySz+drop+L.cell*0.55, h.h/rows);
  const top=h.y+h.h-drop-pitch*(rows-1);
- const key=(k,y)=>textFit(k,rx,y,keySz,INK.faint,"right",500,keySz*0.1,h.w);
+ // measured from rx, not the full column: a seven-figure score ran off-canvas
+ const availW=Math.max(1,rx-h.x);
+ const key=(k,y)=>textFit(k,rx,y,keySz,INK.faint,"right",500,keySz*0.1,availW);
  items.forEach(([k,v],i)=>{
   const y=top+pitch*i;
   key(k,y);
-  textFit(String(v),rx,y+drop,valSz,INK.dim,"right",600,0,h.w);
+  textFit(String(v),rx,y+drop,valSz,INK.dim,"right",600,0,availW);
  });
  const y=top+pitch*(rows-1);
  key(T(g.clock?"g_timeleft":"g_time"),y);
- clock(g,rx,y+drop,h.w,valSz);
+ clock(g,rx,y+drop,availW,valSz);
 }
 function clock(g,rx,y,maxW,size){
  const el=g.clock ? g.left/1000 : ((g.endedAt||now())-g.startedAt)/1000;
@@ -1836,6 +1868,8 @@ const Input = {
   Sfx.unlock();
   if(!G || G.over) { if(k==="pause") UI.togglePause(); return; }
   if(COUNT>0 || startHoldEnd) { if(k==="pause") UI.togglePause(); return; }
+  // soft drop used to latch its flag here, so resuming ran with fast gravity
+  if(G.paused) { if(k==="pause") UI.togglePause(); return; }
   switch(k){
    case "left":  this.held.left=true;  this.setDir(-1); break;
    case "right": this.held.right=true; this.setDir(1);  break;
@@ -2032,12 +2066,17 @@ const START_TXT_MS=700;
 let startHoldEnd=0;
 const READY_P2P={me:false,peer:false};
 const WINS_P2P ={me:0,peer:0};
+// whatever the sender said it was, cut or padded to what this client draws
+function fitBoard(s){
+ const n=COLS*VIS_ROWS; s=String(s||"");
+ return s.length===n ? s : (s.length>n ? s.slice(0,n) : s+".".repeat(n-s.length));
+}
 function mirrorFoes(others){
  FOES=others.map(p=>{
   const was=FOES.find(f=>f.pid===p.pid);
   const f=was||{pid:p.pid,board:null,score:0};
   f.name=p.n; f.dead=p.d; f.wins=p.w;
-  if(p.b){ f.board=Grid.dec(p.b.d||""); f.score=p.b.p|0; if(p.b.o) f.dead=true; }
+  if(p.b){ f.board=fitBoard(Grid.dec(p.b.d||"")); f.score=p.b.p|0; if(p.b.o) f.dead=true; }
   return f;
  });
 }
@@ -2120,6 +2159,9 @@ function startMatch(){
 }
 let rafId=0, lastT=0, sendAcc=0;
 function startGame(mode){
+ clearTimeout(boardDrop); boardDrop=0;   // a fade still pending would null this new well
+ Sfx.hush();                             // and notes queued by the last run must not play over this one
+ UI.hideGameOver(); UI.closePauseMenu();
  G=new Game(mode);
  COUNT=3; countEnd=now()+3000; startHoldEnd=0;
  if(mode==="versus"){
@@ -2704,7 +2746,7 @@ const Net = {
     break;
    case "b":
     if(!FOES[0]) FOES=[{pid:"peer",name:this.peerName||T("opponent"),board:null,dead:false,wins:0}];
-    FOES[0].board=Grid.dec(m.d); FOES[0].score=m.p|0; FOES[0].dead=!!m.o;
+    FOES[0].board=fitBoard(Grid.dec(m.d)); FOES[0].score=m.p|0; FOES[0].dead=!!m.o;
     break;
    case "a":
     if(G && !G.over && G.mode==="versus"){
@@ -2765,10 +2807,10 @@ const Net = {
   if(!FB.on()) throw new Error(T("e_nofb"));
   const idx=await FB.get("/lobby");
   const out=[];
-  const now=Date.now();
+  const t0=Date.now();                    // not `now`, which is the clock helper
   for(const id in (idx||{})){
    const r=idx[id]||{};
-   if(now-(r.t||0)>ROOM_STALE) { FB.del("/lobby/"+id); FB.del("/rooms/"+id); FB.del("/chat/"+id); continue; }
+   if(t0-(r.t||0)>ROOM_STALE) { FB.del("/lobby/"+id); FB.del("/rooms/"+id); FB.del("/chat/"+id); continue; }
    out.push({id, name:String(r.n||"").slice(0,12), count:r.c|0});
   }
   return out;
@@ -2787,7 +2829,8 @@ const Net = {
   this.setState("connected");
  }
 };
-const esc = s => String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const ESC={"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"};
+const esc = s => String(s).replace(/[&<>"']/g,c=>ESC[c]);
 const PARENT = {
  "#v-play":  "#v-home",
  "#v-set":   "#v-home",
@@ -2802,16 +2845,22 @@ const EXIT_MS=100;
 // a deliberate beat between screens, matched by .veil's transition
 function afterScreen(fn){ setTimeout(fn,EXIT_MS); }
 const BOARD_FADE_MS=320;
-// the well is let go only once its own fade has finished
+// held so startGame() can cancel it, and gated on the well it was armed for:
+// otherwise quitting and restarting inside the fade blanked the NEW run
+let boardDrop=0;
 function dropBoard(){
+ Sfx.hush();
  if(G){ G.resolved=true; G.pending=false; }
- setTimeout(()=>{ G=null; FOES=[]; render(null); },BOARD_FADE_MS);
+ const doomed=G;
+ clearTimeout(boardDrop);
+ boardDrop=setTimeout(()=>{ boardDrop=0; if(G&&G!==doomed) return; G=null; FOES=[]; render(null); },BOARD_FADE_MS);
 }
 const UI = {
  cur:"#v-home",
  show(id,inner){
   const from=this.cur;
   if(id && from && id!==from){
+   this.leaving();
    this.board(id);
    this.show(null,true);
    afterScreen(()=>this.show(id,false));
@@ -2827,6 +2876,9 @@ const UI = {
    if(c) this._flush=getComputedStyle(c).transform;
    el.classList.add("on");
    this.cur=id;
+   // the room list is only worth polling while it is the screen being looked
+   // at; leaving() stops it again on the way out
+   if(id==="#v-lobby" && !this._rooms) this.doOnline();
   }else this.cur=null;
   if(!inner) document.body.classList.toggle("playing",!!G && !this.cur);
  },
@@ -2839,6 +2891,8 @@ const UI = {
   if(NET_SCREENS[src]) Net.reset();
   this.show(to);
  },
+ // a half-finished rebind, and the lobby poll that otherwise ran forever
+ leaving(){ cancelBind(); clearInterval(this._rooms); this._rooms=0; },
  togglePause(){
   if(!G || G.over) return;
   if(this.pauseOpen) this.closePauseMenu();
@@ -2891,9 +2945,10 @@ const UI = {
   const menuKey = g.mode==="versus" ? "go_room" : "go_menu";
   const menuBtn=$("#go-menu");
   menuBtn.dataset.i18n=menuKey; menuBtn.textContent=T(menuKey);
+  document.body.classList.add("over");
   $("#game-over").classList.add("on");
  },
- hideGameOver(){ $("#game-over").classList.remove("on"); },
+ hideGameOver(){ document.body.classList.remove("over"); $("#game-over").classList.remove("on"); },
  backToMenuFromGameOver(){
   this.hideGameOver();
   if(G && G.mode==="versus"){ this.showRoom(); return; }
@@ -3067,7 +3122,8 @@ const UI = {
     '<div class="nm">'+esc(p.n)+(you?" · "+esc(T("room_you")):"")+(p.spec?" · "+esc(T("room_spectating")):"")+(battling?" · "+esc(T("room_battling")):"")+'</div>'+
     '<div class="w">'+(p.w|0)+'<small>'+esc(T("room_wins"))+'</small></div></div>';
   });
-  host.innerHTML=rows.join("");
+  // an empty bordered box says nothing; name the state instead
+  host.innerHTML=rows.length?rows.join(""):'<p class="empty">'+esc(T("room_empty"))+'</p>';
   const mySpec=!!(me&&me.spec);
   const btn=$("#b-ready");
   const mine=inRoom?!!(me&&me.rdy):READY_P2P.me;
@@ -3130,6 +3186,8 @@ const UI = {
   this.showGameOver(beat);
  },
  gameOver(won){
+  if(this._goneFor===G) return;   // one card and one tally, however often the round is called
+  this._goneFor=G;
   if(G.mode==="versus" && Net.mode!=="room"){ if(won) WINS_P2P.me++; else WINS_P2P.peer++; }
   const beat=noteRun(G,won,((G.endedAt||now())-G.startedAt)/1000);
   this.renderRoom();
@@ -3138,7 +3196,7 @@ const UI = {
  openSettings(){ this.show("#v-set"); this.openTab(TAB); },
  openTab(name){
   TAB=name;
-  $$("#set-rail [data-tab]").forEach(b=>b.classList.toggle("on",b.dataset.tab===name));
+  $$("#set-rail [data-tab]").forEach(b=>{ const on=b.dataset.tab===name; b.classList.toggle("on",on); b.setAttribute("aria-selected",on); });
   $$("#v-set .panel").forEach(p=>p.classList.toggle("on",p.dataset.panel===name));
   if(name==="controls"){ repaintSettings(); paintTouch(); bindRows("#keylist","keys"); bindRows("#padlist","pads"); paintPad(); }
   if(name==="audio") repaintSettings();
@@ -3199,8 +3257,6 @@ $$("[data-speed]").forEach(b=>b.onclick=()=>{
  afterScreen(()=>startGame("speed"));
 });
 $("#b-mkroom").onclick=()=>UI.doMakeRoom();
-UI.doOnline();
-document.addEventListener("visibilitychange",()=>{ if(!document.hidden && UI.cur==="#v-lobby") UI.refreshRooms(); });
 $("#h-copy").onclick=()=>UI.copy("#h-out","#h-hint");
 $("#h-connect").onclick=()=>UI.doAccept();
 $("#j-go").onclick=()=>UI.doAnswer();
@@ -3315,6 +3371,7 @@ FOLDS.forEach(f=>{
 });
 function paintPad(){
  $("#s-padon").classList.toggle("on",CFG.padOn);
+ $("#s-padon").setAttribute("aria-checked",CFG.padOn);
  const pads=navigator.getGamepads?[...navigator.getGamepads()].filter(Boolean):[];
  $("#pad-state").textContent=pads.length?pads[0].id.slice(0,32):T("pad_none");
 }
@@ -3326,6 +3383,15 @@ const KEYNAME = c => KEYFIX[c] || String(c||"")
  .toUpperCase();
 const PADNAME = i => ({0:"BOTTOM",1:"RIGHT",2:"LEFT",3:"TOP",4:"L",5:"R",6:"ZL",7:"ZR",
             8:"SELECT",9:"START",12:"D-UP",13:"D-DOWN",14:"D-LEFT",15:"D-RIGHT"})[i]||("BTN "+i);
+// left armed, the next key pressed anywhere (mid-game included) was
+// swallowed and silently rebound
+function cancelBind(){
+ if(!BINDING && !Pad.watching) return;
+ BINDING=null; Pad.watching=null;
+ $$(".bindrow.binding").forEach(r=>r.classList.remove("binding"));
+ if($("#keylist")) bindRows("#keylist","keys");
+ if($("#padlist")) bindRows("#padlist","pads");
+}
 function bindRows(host,which){
  const el=$(host);
  if(!el) return;
@@ -3336,6 +3402,7 @@ function bindRows(host,which){
   esc(binds[a].map(name).join(" · ")||T("act_none"))+'</b></div>').join("");
  el.querySelectorAll("[data-act]").forEach(row=>row.onclick=()=>{
   const act=row.dataset.act;
+  cancelBind();                      // only one row may be waiting at a time
   row.classList.add("binding");
   row.querySelector("b").textContent=T("act_press");
   const done=code=>{
@@ -3363,6 +3430,7 @@ function paintTouch(){
 $("#s-padon").onclick=()=>{
  CFG.padOn=!CFG.padOn; saveCfg(); Sfx.ui();
  $("#s-padon").classList.toggle("on",CFG.padOn);
+ $("#s-padon").setAttribute("aria-checked",CFG.padOn);
 };
 addEventListener("gamepadconnected",()=>{ if(UI.cur==="#v-set") paintPad(); });
 addEventListener("gamepaddisconnected",()=>{ if(UI.cur==="#v-set") paintPad(); });
@@ -3388,15 +3456,25 @@ $$(".lang").forEach(b=>{
  ["#s-grid","grid"],["#s-swap","swap"]].forEach(([id,key])=>{
  const el=$(id);
  el.classList.toggle("on",!!CFG[key]);
+ el.setAttribute("aria-checked",!!CFG[key]);
  el.onclick=()=>{
   CFG[key]=!CFG[key];
   el.classList.toggle("on",CFG[key]);
+  el.setAttribute("aria-checked",CFG[key]);
   saveCfg(); Sfx.ui();
   if(key==="swap"){ applyControlSide(); layout(); }
  };
 });
 $("#s-fb").value=CFG.fbUrl;
 $("#s-fb").oninput=e=>{ CFG.fbUrl=e.target.value.trim(); saveCfg(); };
+// upload problems are silent otherwise: the row simply would not change
+let tileNoteKey="";
+function tileNote(key){
+ if(key!==undefined) tileNoteKey=key;
+ const el=$("#tile-note"); if(!el) return;
+ el.textContent=tileNoteKey?T(tileNoteKey):"";
+ el.style.color=tileNoteKey?"#ff7b8a":"";
+}
 // the flat colour stays under the swatch so it still reads once a tile is cleared
 function paintTileRow(t){
  $("#tw-"+t).style.backgroundColor=PIECE_COLOR[t];
@@ -3407,33 +3485,57 @@ $("#tile-rows").innerHTML=TYPES.map(t=>`
  <div class="sp tile-row">
   <span class="tile-label"><span class="tile-swatch" id="tw-${t}"></span>${t}</span>
   <span class="tile-actions">
-   <label class="mi ghost tile-upload" for="tf-${t}" data-i18n="set_tile_upload"></label>
-   <input type="file" id="tf-${t}" accept="image/*" hidden>
+   <button type="button" class="mi ghost tile-upload" id="tu-${t}" data-i18n="set_tile_upload"></button>
+   <input type="file" id="tf-${t}" accept="image/*" hidden tabindex="-1" aria-hidden="true">
    <button type="button" class="mi ghost tile-reset" id="tr-${t}" data-i18n="set_tile_reset" hidden></button>
   </span>
- </div>`).join("");
+ </div>`).join("")
+ +'<div class="sp full"><button type="button" class="mi ghost" id="tile-clear" data-i18n="set_tile_clearall"></button><small id="tile-note"></small></div>';
+$("#tile-clear").onclick=()=>{
+ Sfx.ui();
+ TYPES.forEach(t=>{ delete CFG.tiles[t]; loadTile(t,null); });
+ store.set("tiles",CFG.tiles);
+ TYPES.forEach(paintTileRow); paintTileClear(); tileNote("");
+};
+function paintTileClear(){ const b=$("#tile-clear"); if(b) b.hidden=!TYPES.some(t=>CFG.tiles[t]); }
 TYPES.forEach(t=>{
  paintTileRow(t);
+ $("#tu-"+t).onclick=()=>{ Sfx.ui(); $("#tf-"+t).click(); };
  $("#tf-"+t).onchange=e=>{
   const file=e.target.files[0];
   e.target.value="";
-  if(!file || !file.type.startsWith("image/")) return;
+  if(!file) return;
+  if(!file.type.startsWith("image/")) return tileNote("e_tile_type");
   const reader=new FileReader();
+  reader.onerror=()=>tileNote("e_tile_read");
   reader.onload=()=>{
    const img=new Image();
+   // a rejected file used to do nothing at all, with no way to tell why
+   img.onerror=()=>tileNote("e_tile_read");
    img.onload=()=>{
     // downscaled before storing: a phone photo would not fit seven times over in localStorage
     const size=128, side=Math.min(img.naturalWidth,img.naturalHeight);
+    if(!side) return tileNote("e_tile_read");
     const c=document.createElement("canvas");
     c.width=c.height=size;
-    c.getContext("2d").drawImage(img,
-     (img.naturalWidth-side)/2,(img.naturalHeight-side)/2,side,side, 0,0,size,size);
-    const url=c.toDataURL("image/jpeg",0.85);
+    const cx=c.getContext("2d");
+    cx.drawImage(img,(img.naturalWidth-side)/2,(img.naturalHeight-side)/2,side,side, 0,0,size,size);
+    // JPEG has no alpha, so a cut-out corner came back filled black
+    let url;
+    try{
+     const d=cx.getImageData(0,0,size,size).data;
+     let clear=false;
+     for(let i=3;i<d.length;i+=4) if(d[i]<250){ clear=true; break; }
+     url=clear?c.toDataURL("image/png"):c.toDataURL("image/jpeg",0.85);
+    }catch(_){ url=c.toDataURL("image/jpeg",0.85); }
+    const was=CFG.tiles[t];
     CFG.tiles[t]=url;
     if(store.set("tiles",CFG.tiles)){
-     loadTile(t,url); paintTileRow(t); Sfx.ui();
+     loadTile(t,url); paintTileRow(t); tileNote(""); Sfx.ui();
     }else{
-     delete CFG.tiles[t];
+     // storage is full: say so rather than leaving the row unchanged
+     if(was===undefined) delete CFG.tiles[t]; else CFG.tiles[t]=was;
+     tileNote("e_tile_room");
     }
    };
    img.src=reader.result;
@@ -3445,9 +3547,10 @@ TYPES.forEach(t=>{
   delete CFG.tiles[t];
   store.set("tiles",CFG.tiles);
   loadTile(t,null);
-  paintTileRow(t);
+  paintTileRow(t); paintTileClear(); tileNote("");
  };
 });
+paintTileClear();
 $("#s-name").value=CFG.name;
 $("#s-name").oninput=e=>{
  CFG.name=e.target.value.toUpperCase().replace(/[^A-Z0-9 _-]/g,"").slice(0,12)||"PLAYER";
@@ -3585,7 +3688,10 @@ resizeCanvas();
 UI.netStatus();
 render(null);
 document.addEventListener("visibilitychange",()=>{
- if(!document.hidden || !G || G.over) return;
+ if(!document.hidden){ if(UI.cur==="#v-lobby") UI.refreshRooms(); return; }
+ if(!G || G.over) return;
+ // Solo can wait for its player; a match cannot — the room has other people
+ // in it and this tab is about to stop running.
  if(G.mode==="versus") dropOut();
  else if(!G.paused) UI.togglePause();
 });
