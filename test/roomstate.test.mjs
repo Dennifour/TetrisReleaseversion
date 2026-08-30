@@ -101,4 +101,19 @@ test("a death published into live marks a seat not-alive", async () => {
   await end();
 });
 
+test("real millisecond timestamps are not truncated to int32", async () => {
+  const { c, end } = await boot();
+  const out = await c.page.evaluate(() => {
+    const t = Date.now();                     // ~1.79e12, well past int32
+    const st = RoomState.make("p1");
+    RoomState.apply(st, { type: "put", path: "/", data: { seat: { p1: { j: t, hb: t } } } });
+    const v = RoomState.view(st, t);
+    return { hb: v.seats[0].hb, j: v.seats[0].j, fresh: v.seats[0].fresh, t };
+  });
+  assert.equal(out.hb, out.t, "a heartbeat must survive the round trip intact");
+  assert.equal(out.j, out.t);
+  assert.equal(out.fresh, true, "a seat that just beat must not read as stale");
+  await end();
+});
+
 test.after(shutdown);

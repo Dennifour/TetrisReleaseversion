@@ -2084,13 +2084,13 @@ const TIE_SETTLE=700, TIE_CAP=2000;
 // every client sorts the same published durations, so all of them name the same winner
 function resolveRound(){
  if(!G||G.mode!=="versus"||!G.attacks||G.resolved||G.spectating||G.stranded) return;
- const room = Net.mode==="room" && Room.on;
+ const room = Net.mode==="room" && RoomClient.on;
+ const rv = room ? RoomClient.view() : null;
  if(!G.over){
-  if(!room || Room.roster.size<2) return;
-  const alive=Room.alive();
-  if(alive.length===1 && alive[0].pid===PID){
+  if(!room || !rv.roster || Object.keys(rv.roster).length<2) return;
+  if(rv.alive.length===1 && rv.alive[0].pid===PID){
    G.resolved=true;
-   Room.set("w",(Room.me()||{w:0}).w+1);
+   RoomClient.bumpWin().catch(()=>{});
    G.win();
   }
   return;
@@ -2100,12 +2100,12 @@ function resolveRound(){
  const lose=()=>{ G.resolved=true; G.pending=false; UI.gameOver(false); };
  const take=()=>{
   G.resolved=true; G.pending=false;
-  if(room) Room.set("w",(Room.me()||{w:0}).w+1);
+  if(room) RoomClient.bumpWin().catch(()=>{});
   G.outlasted();
   UI.gameOver(true);
  };
  const field = room
-  ? Room.players.filter(p=>p.pid!==PID && Room.inRound(p)).map(p=>({pid:p.pid, done:p.d, ms:p.ms|0}))
+  ? rv.seats.filter(s=>s.pid!==PID && RoomState.inRound(rv,s.pid)).map(s=>({pid:s.pid, done:s.d, ms:s.ms}))
   : (FOES[0] ? [{pid:"peer", done:!!FOES[0].dead, ms:FOES[0].ms|0}] : []);
  if(field.length && field.every(p=>p.done && p.ms>0)){
   const mine=G.lasted();
@@ -2144,10 +2144,13 @@ function settleScore(){
 function startMatch(){
  if(G && G.mode==="versus" && !G.over) return;
  Net.lastB="";
- const spectating=Room.on && !!(Room.me()&&Room.me().spec);
- if(Room.on){
-  Room.mark({d:false, ms:null, b:null, rdy:false, g:null});
-  const m=Room.me(); if(m) m.rdy=false;
+ const meSeat=RoomClient.on ? RoomClient.view().seats.find(s=>s.pid===PID) : null;
+ const spectating=!!(meSeat&&meSeat.spec);
+ if(RoomClient.on){
+  // clear only this seat's own round state; /gb is never nulled here, since
+  // that erased garbage sent between the go signal and this write
+  Sig.del(RoomClient.path()+"/live/"+PID).catch(()=>{});
+  Sig.patch(RoomClient.mine(),{rdy:false}).catch(()=>{});
  }else{
   NET_SEED = advanceSeed(NET_SEED);
   READY_P2P.me=false; READY_P2P.peer=false;
@@ -2165,7 +2168,7 @@ function startGame(mode){
  G=new Game(mode);
  COUNT=3; countEnd=now()+3000; startHoldEnd=0;
  if(mode==="versus"){
-  Room.starting=0;
+  RoomClient.starting=0;
   FOES.forEach(f=>{ f.board=null; f.score=0; f.dead=false; f.ms=0; });
  }
  else FOES=[];
@@ -2224,10 +2227,10 @@ function drainEvents(){
    case "attack":
     if(G.mode==="versus" && Net.ready()){
      if(Net.mode==="room"){
-      const live=Room.alive().filter(p=>p.pid!==PID);
+      const live=RoomClient.view().alive.filter(s=>s.pid!==PID);
       if(live.length){
        const t=live[rnd(live.length)];
-       Room.attack(t.pid,ev.lines);
+       RoomClient.sendAttack(t.pid,ev.lines).catch(()=>{});
        FX.banner(T("b_sendto",{n:ev.lines,who:t.n}),"combo");
       }
      }else{
@@ -2237,7 +2240,8 @@ function drainEvents(){
     }
     break;
    case "dead":
-    if(Net.mode==="room"){ if(Room.on) Room.mark({d:true, ms:G.lasted()}); }
+    // awaited with retry inside: a dropped death left the round with no winner
+    if(Net.mode==="room"){ RoomClient.publishDeath(G.lasted()).catch(()=>{}); }
     else if(Net.ready()) Net.send({t:"d", ms:G.lasted()});
     if(G.rule==="score") UI.matchPending();
     else if(G.mode==="versus" && !G.spectating && !G.stranded){ G.pending=true; G.pendingAt=now(); }
@@ -2492,9 +2496,11 @@ const RoomState = {
   const meta=t.meta||{}, go=t.go||null, live=t.live||{};
   const seats=Object.keys(t.seat||{}).map(pid=>{
    const r=t.seat[pid]||{};
-   return {pid, n:String(r.n||"").slice(0,12)||T("opponent"), j:r.j|0, hb:r.hb|0,
+   // ms timestamps overflow int32, so never |0 them
+   const hb=+r.hb||0;
+   return {pid, n:String(r.n||"").slice(0,12)||T("opponent"), j:+r.j||0, hb,
        rdy:!!r.rdy, spec:!!r.spec, w:r.w|0, d:!!(live[pid]&&live[pid].o),
-       ms:(live[pid]&&live[pid].ms)|0, fresh:(nowMs-(r.hb|0))<SEAT_TTL};
+       ms:+(live[pid]&&live[pid].ms)||0, fresh:(nowMs-hb)<SEAT_TTL};
   }).sort((a,b)=>a.j-b.j||(a.pid<b.pid?-1:1));
   const v={id:st.id||null, host:meta.h||null, rule:meta.r==="score"?"score":"attack",
       go, seats, live, roster:(go&&go.roster)||null, me:st.me};
@@ -2566,7 +2572,51 @@ const RoomClient = {
   this.onRound(v);
   UI.renderRoom();
  },
- onRound(){},
+ async setReady(v){ if(this.on) await Sig.patch(this.mine(),{rdy:!!v}); },
+ async setSpectating(v){ if(this.on) await Sig.patch(this.mine(),{spec:!!v, rdy:false}); },
+ async setRule(r){ if(this.isHost()) await Sig.patch(this.path()+"/meta",{r:r==="score"?"score":"attack"}); },
+ async publishBoard(b){ if(this.on) await Sig.patch(this.path()+"/live/"+PID,b); },
+ async publishDeath(ms){ if(this.on) await Sig.patch(this.path()+"/live/"+PID,{o:1,ms:ms|0}); },
+ async sendAttack(pid,n){ if(this.on) await Sig.put(this.path()+"/gb/"+pid+"/"+PID+"_"+(++this.gseq),n|0); },
+ async bumpWin(){ return this.on ? Sig.cas(this.mine()+"/w",v=>(v|0)+1) : 0; },
+ // idempotent by message id: the old code applied before its delete landed
+ takeGarbage(g){
+  for(const k of Object.keys(g||{})){
+   if(this.seen.has(k)) continue;
+   this.seen.add(k);
+   const n=Math.max(0,Math.min(COLS*2,g[k]|0));
+   if(G && !G.over && G.mode==="versus" && n>0) G.queueGarbage(n);
+   if(this.on) Sig.del(this.path()+"/gb/"+PID+"/"+k).catch(()=>{});
+  }
+ },
+ async callStart(){
+  if(!this.isHost()) return;
+  const roster={};
+  for(const s of this.view().seats) if(!s.spec && s.fresh) roster[s.pid]=s.j;
+  if(Object.keys(roster).length<2) return;
+  this.starting=now();
+  await Sig.put(this.path()+"/go",{s:((Math.random()*0xffffffff)>>>0)||1, r:NET_RULE, at:Date.now(), roster});
+ },
+ onRound(v){
+  const g=((this.st.tree||{}).gb||{})[PID];
+  if(g) this.takeGarbage(g);
+  if(!this.isHost() && !this.starting) NET_RULE=v.rule;
+  if(v.go && v.go.at && v.go.at!==this.lastGo){
+   this.lastGo=v.go.at;
+   this.starting=now();
+   NET_SEED=v.go.s>>>0;
+   NET_RULE=v.go.r==="score"?"score":"attack";
+   startMatch();
+  }
+  if(this.isHost()) this.maybeStart(v);
+ },
+ maybeStart(v){
+  if(G && !G.over) return;
+  if(this.starting && now()-this.starting<8000) return;
+  const p=v.seats.filter(s=>!s.spec && s.fresh);
+  if(p.length<2||!p.every(s=>s.rdy)) return;
+  this.callStart().catch(()=>{});
+ },
  // chat streams on its own path, so the cq marker and its ordering hazard are gone
  openChat(id){
   this.chatSub=Sig.stream("/chat/"+id,ev=>{
@@ -2625,7 +2675,48 @@ const RoomClient = {
   await Promise.race([work.catch(()=>{}), Sig.sleep(LEAVE_TIMEOUT_MS)]);
  }
 };
-const ROOM_STALE=120000;
+// rendering only; markup and class names are unchanged, so the CSS still applies
+const RoomView = {
+ render(v){
+  const host=$("#seatlist");
+  if(!host) return;
+  const inRoom=!!v;
+  const players=inRoom ? v.seats.map(s=>({
+    pid:s.pid, n:s.n, rdy:s.rdy, spec:s.spec, w:s.w,
+    battling:!!v.roster && !s.spec && !s.d && RoomState.inRound(v,s.pid)
+   }))
+   :(Net.ready()?[{pid:PID,n:CFG.name,rdy:READY_P2P.me,w:WINS_P2P.me,battling:false},
+           {pid:"peer",n:Net.peerName||T("opponent"),rdy:READY_P2P.peer,w:WINS_P2P.peer,battling:false}]:[]);
+  const active=players.filter(p=>!p.spec);
+  const me=players.find(p=>p.pid===PID)||null;
+  // this runs on every stream event now, so skip the rebuild when nothing moved
+  const sig=CFG.lang+":"+JSON.stringify(players);
+  if(sig!==this._sig){
+   this._sig=sig;
+   const rows=players.map(p=>{
+    const you=p.pid===PID;
+    return '<div class="seat-row'+(p.rdy?" ready":"")+(p.battling?" battling":"")+(p.spec?" spectating":"")+(you?" mine":"")+'" data-pid="'+esc(p.pid)+'">'+
+     '<div class="nm">'+esc(p.n)+(you?" · "+esc(T("room_you")):"")+(p.spec?" · "+esc(T("room_spectating")):"")+(p.battling?" · "+esc(T("room_battling")):"")+'</div>'+
+     '<div class="w">'+(p.w|0)+'<small>'+esc(T("room_wins"))+'</small></div></div>';
+   });
+   // an empty bordered box says nothing; name the state instead
+   host.innerHTML=rows.length?rows.join(""):'<p class="empty">'+esc(T("room_empty"))+'</p>';
+  }
+  const mySpec=!!(me&&me.spec);
+  const btn=$("#b-ready");
+  if(btn){ btn.textContent=T(mySpec?"room_ready":(me&&me.rdy?"room_unready":"room_ready")); btn.classList.toggle("ready",!!(me&&me.rdy)); btn.disabled=active.length<2||mySpec; }
+  const specBtn=$("#b-spectate");
+  if(specBtn){
+   specBtn.hidden=!inRoom;                    // offered from the start, not only after a round
+   specBtn.textContent=T(mySpec?"room_unspectate":"room_spectate");
+   specBtn.classList.toggle("on",mySpec);
+  }
+  const hint=$("#room-hint");
+  if(hint && hint.dataset.orig===undefined) hint.textContent = active.length<2 ? T("room_alone") : T("room_hint_n",{n:active.length});
+  UI.paintRule();
+  UI.renderChat();
+ }
+};
 const ROOM_ALPHA="ACDEFGHJKLMNPQRTUVWXYZ2346789";
 const roomId = n => Array.from({length:n||6},()=>ROOM_ALPHA[rnd(ROOM_ALPHA.length)]).join("");
 // run-length encoded: 200 cells become about 60
@@ -2652,206 +2743,13 @@ const Grid = {
   return out;
  }
 };
-const ROOM_MS=220, ROOM_IDLE_MS=900, ROOM_HB=2500, ROOM_RELIST=30000,
-   ROOM_GONE=11000, CHAT_KEEP=40, MAX_SEATS=4;
+const ROOM_MS=220, CHAT_KEEP=40, MAX_SEATS=4;
 let PID="";
-const Room = {
- id:null, on:false, host:false, timer:null, hb:null,
- players:[], chat:[], gseq:0, lastGo:0, seed:0,
- cq:"",
- listedC:0, listedAt:0,
- beatAt:0,
- roster:new Map(),
- dropped:new Set(),
- starting:0,
- lastPoll:0,
- path(){ return "/rooms/"+this.id; },
- // chat lives outside the room node, which is re-read several times a second
- chatPath(){ return "/chat/"+this.id; },
- mine(){ return this.path()+"/p/"+PID; },
- me(){ return this.players.find(p=>p.pid===PID)||null; },
- others(){ return this.players.filter(p=>p.pid!==PID); },
- // the join stamp too: a player who left and came back is a new arrival, not a survivor
- inRound(p){ return !this.lastGo || (this.roster.get(p.pid)===p.j && !this.dropped.has(p.pid)); },
- alive(){ return this.players.filter(p=>!p.d && this.inRound(p)); },
- async create(){
-  if(!Sig.on()) throw new Error(T("e_nofb"));
-  PID=PID||roomId(8);
-  const id=roomId(6);
-  NET_RULE="attack";
-  await Sig.put("/rooms/"+id,{h:PID, t:Date.now(), r:NET_RULE});
-  await Sig.put("/rooms/"+id+"/p/"+PID,{n:CFG.name, j:Date.now(), t:Date.now(), w:0});
-  await Sig.put("/lobby/"+id,{n:CFG.name, t:Date.now(), c:1});
-  this.begin(id,true,0);
-  return id;
- },
- async join(id){
-  if(!Sig.on()) throw new Error(T("e_nofb"));
-  PID=PID||roomId(8);
-  const v=await Sig.get("/rooms/"+id);
-  if(!v) throw new Error(T("e_noroom"));
-  const gone=Date.now()-ROOM_GONE;
-  const seated=Object.keys(v.p||{}).filter(k=>((v.p[k]||{}).t||0)>gone).length;
-  if(seated>=MAX_SEATS) throw new Error(T("e_roomfull"));
-  await Sig.put("/rooms/"+id+"/p/"+PID,{n:CFG.name, j:Date.now(), t:Date.now(), w:0});
-  this.begin(id,false,(v.go&&v.go.at)||0);
- },
- begin(id,host,lastGo){
-  this.id=id; this.host=host; this.on=true;
-  this.players=[]; this.chat=[]; this.gseq=0; this.lastGo=lastGo||0;
-  this.roster=new Map(); this.dropped=new Set(); this.starting=0; this.lastPoll=now();
-  this.cq=""; this.listedC=0; this.listedAt=0; this.beatAt=0;
-  this.beat();
-  this.hb=setInterval(()=>this.beat(),ROOM_HB);
-  this.poll();
- },
- stop(gone){
-  if(!this.on && !this.id) return;
-  const id=this.id, host=this.host;
-  this.on=false;
-  clearTimeout(this.timer); clearInterval(this.hb);
-  this.timer=this.hb=null; this.id=null;
-  this.players=[]; this.chat=[]; this.roster=new Map(); this.dropped=new Set();
-  this.starting=0; this.lastPoll=0; this.cq=""; this.beatAt=0;
-  if(id && Sig.on()){
-   if(host){ Sig.del("/lobby/"+id); Sig.del("/rooms/"+id); Sig.del("/chat/"+id); }
-   else if(!gone){ Sig.del("/rooms/"+id+"/p/"+PID); Sig.put("/lobby/"+id+"/t",Date.now()); }
-   else Sig.del("/rooms/"+id+"/p/"+PID);
-  }
- },
- // full speed only during a round or when someone is ready
- rate(){
-  if(this.starting) return ROOM_MS;
-  if(G && G.mode==="versus" && !G.resolved && !G.stranded) return ROOM_MS;
-  return this.players.some(p=>p.rdy) ? ROOM_MS : ROOM_IDLE_MS;
- },
- beat(){
-  if(!this.on) return;
-  if(Date.now()-this.beatAt>=ROOM_HB-100){
-   this.beatAt=Date.now();
-   Sig.put(this.mine()+"/t",this.beatAt).catch(()=>{});
-  }
-  if(!this.host) return;
-  const c=this.players.length||1;
-  if(c===this.listedC && Date.now()-this.listedAt<ROOM_RELIST) return;
-  this.listedC=c; this.listedAt=Date.now();
-  Sig.patch("/lobby/"+this.id,{n:CFG.name, t:Date.now(), c}).catch(()=>{});
- },
- set(k,v){ if(this.on) Sig.put(this.mine()+"/"+k,v).catch(()=>{}); },
- board(b){ if(!this.on) return; this.beatAt=Date.now(); Sig.patch(this.mine(),{b, t:this.beatAt}).catch(()=>{}); },
- // one PATCH: a death and its duration have to land together or the round is judged wrong
- mark(o){ if(this.on) Sig.patch(this.mine(),o).catch(()=>{}); },
- pushRule(){ if(this.on&&this.host) Sig.patch(this.path(),{r:NET_RULE}).catch(()=>{}); },
- // addressed and queued, so two attacks in one tick both land
- attack(pid,n){ if(this.on) Sig.put(this.path()+"/p/"+pid+"/g/"+PID+"_"+(++this.gseq),n).catch(()=>{}); },
- say(text){
-  if(!this.on) return;
-  const t=String(text).slice(0,120);
-  if(!t.trim()) return;
-  const key=Date.now()+"-"+PID;
-  this.chat=this.chat.concat([{key,n:CFG.name,m:t}]).slice(-CHAT_KEEP);
-  UI.renderChat();
-  Sig.put(this.chatPath()+"/"+key,{n:CFG.name,m:t}).catch(()=>{});
-  Sig.patch(this.path(),{cq:key}).catch(()=>{});
- },
- async readChat(){
-  if(!this.on) return;
-  const id=this.id;
-  try{
-   const c=await Sig.get("/chat/"+id);
-   if(!this.on||this.id!==id) return;
-   this.foldChat(c);
-   UI.renderChat();
-  }catch(e){ this.cq=""; }
- },
- foldChat(c){
-  if(!c){ this.chat=this.chat.filter(x=>x.key); return; }
-  const keys=Object.keys(c).sort((a,b)=>parseInt(a,10)-parseInt(b,10));
-  const confirmed=keys.slice(-CHAT_KEEP).map(k=>({
-   key:k, n:String((c[k]||{}).n||"").slice(0,12), m:String((c[k]||{}).m||"").slice(0,120)
-  }));
-  const seen=new Set(keys);
-  const stillMine=this.chat.filter(x=>x.key && !seen.has(x.key));
-  this.chat=confirmed.concat(stillMine)
-   .sort((a,b)=>parseInt(a.key,10)-parseInt(b.key,10))
-   .slice(-CHAT_KEEP);
-  if(this.host && keys.length>CHAT_KEEP)
-   keys.slice(0,keys.length-CHAT_KEEP).forEach(k=>Sig.del(this.chatPath()+"/"+k));
- },
- callStart(){
-  if(!this.host||!this.on) return;
-  const seed=((Math.random()*0xffffffff)>>>0)||1;
-  this.starting=now();
-  Sig.put(this.path()+"/go",{s:seed,r:NET_RULE,at:Date.now()}).catch(()=>{});
- },
- // one GET brings the whole room back, so the request count stays flat as it fills
- async poll(){
-  if(!this.on) return;
-  const stalled = !!this.lastPoll && now()-this.lastPoll>ROOM_GONE;
-  if(stalled) dropOut();
-  this.lastPoll=now();
-  try{
-   const v=await Sig.get(this.path());
-   if(!this.on) return;
-   if(!v||!v.p||!v.h){ UI.roomGone(); return; }
-   if(!this.host && !this.starting) NET_RULE = v.r==="score" ? "score" : "attack";
-   const nowMs=Date.now();
-   const list=Object.keys(v.p).map(pid=>{
-    const r=v.p[pid]||{};
-    return {pid, n:String(r.n||"").slice(0,12)||T("opponent"), j:r.j||0, t:r.t||0,
-        rdy:!!r.rdy, w:r.w|0, d:!!r.d, ms:r.ms|0, b:r.b||null, spec:!!r.spec};
-   }).filter(p=>p.pid===PID || nowMs-p.t<ROOM_GONE)
-    .sort((a,b)=>a.j-b.j||(a.pid<b.pid?-1:1));
-   if(!list.some(p=>p.pid===PID)){ UI.roomGone(); return; }
-   this.players=list;
-   if(!list.some(p=>p.pid===(v.h||""))){
-    const heir=list[0];
-    if(heir && heir.pid===PID && !this.host){
-     this.host=true;
-     Sig.put(this.path()+"/h",PID).catch(()=>{});
-    }
-   }else if(this.host && v.h!==PID) this.host=false;
-   if(this.lastGo)
-    for(const pid of this.roster.keys())
-     if(!list.some(p=>p.pid===pid)) this.dropped.add(pid);
-   const mineRec=v.p[PID]||{};
-   if(mineRec.g){
-    for(const k of Object.keys(mineRec.g)){
-     const n=mineRec.g[k]|0;
-     if(G && !G.over && G.mode==="versus" && n>0) G.queueGarbage(n);
-     Sig.del(this.mine()+"/g/"+k);
-    }
-   }
-   const cq=String(v.cq||"");
-   if(cq!==this.cq){ this.cq=cq; if(cq) this.readChat(); }
-   if(v.go && v.go.at && v.go.at!==this.lastGo){
-    this.lastGo=v.go.at;
-    this.starting=now();
-    this.roster=new Map(list.filter(p=>!p.spec).map(p=>[p.pid,p.j]));
-    this.dropped.clear();
-    NET_SEED=v.go.s>>>0;
-    NET_RULE=v.go.r==="score"?"score":"attack";
-    if(!stalled) startMatch();
-   }
-   mirrorFoes(this.others().filter(p=>this.inRound(p)));
-   UI.renderRoom();
-   if(this.host) this.maybeStart();
-  }catch(e){  }
-  if(this.on) this.timer=setTimeout(()=>this.poll(),this.rate());
- },
- maybeStart(){
-  if(G && !G.over) return;
-  if(this.starting && now()-this.starting<8000) return;
-  const p=this.players.filter(x=>!x.spec);
-  if(p.length<2||!p.every(x=>x.rdy)) return;
-  this.callStart();
- }
-};
 const Net = {
  pc:null, dc:null, role:null, peerName:"", state:"idle",
  stats:{host:0,srflx:0,ice:"new",conn:"new"},
  watchdog:null, offerCode:"", mode:"p2p", lastB:"",
- ready(){ return this.mode==="room" ? Room.on : !!(this.dc && this.dc.readyState==="open"); },
+ ready(){ return this.mode==="room" ? RoomClient.on : !!(this.dc && this.dc.readyState==="open"); },
  setState(s){ this.state=s; UI.netStatus(); },
  resetStats(){ this.stats={host:0,srflx:0,ice:"new",conn:"new"}; UI.diag(); },
  reset(){
@@ -2920,7 +2818,7 @@ const Net = {
    const key=JSON.stringify(b);
    if(key===this.lastB) return;
    this.lastB=key;
-   if(this.mode==="room"){ Room.board(b); return; }
+   if(this.mode==="room"){ RoomClient.publishBoard(b).catch(()=>{}); return; }
    obj=Object.assign({t:"b"},b);
   }
   if(this.mode==="room") return;
@@ -2994,31 +2892,6 @@ const Net = {
   this.setState("linking");
   this.armWatchdog(45000);
  },
- async listRooms(){
-  if(!Sig.on()) throw new Error(T("e_nofb"));
-  const idx=await Sig.get("/lobby");
-  const out=[];
-  const t0=Date.now();                    // not `now`, which is the clock helper
-  for(const id in (idx||{})){
-   const r=idx[id]||{};
-   if(t0-(r.t||0)>ROOM_STALE) { Sig.del("/lobby/"+id); Sig.del("/rooms/"+id); Sig.del("/chat/"+id); continue; }
-   out.push({id, name:String(r.n||"").slice(0,12), count:r.c|0});
-  }
-  return out;
- },
- async openRoom(){
-  this.reset();
-  this.role="host"; this.mode="room";
-  const id=await Room.create();
-  this.setState("connected");
-  return id;
- },
- async joinRoom(id){
-  this.reset();
-  this.role="guest"; this.mode="room";
-  await Room.join(id);
-  this.setState("connected");
- }
 };
 const ESC={"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"};
 const esc = s => String(s).replace(/[&<>"']/g,c=>ESC[c]);
@@ -3272,11 +3145,11 @@ const UI = {
  },
  peerJoined(){ if(G && G.mode==="versus" && !G.over) return; Sfx.win(); this.showRoom(); },
  showRoom(){ this.renderRoom(); this.show("#v-room"); },
- isHost(){ return Room.on ? Room.host : Net.role==="host"; },
+ isHost(){ return RoomClient.on ? RoomClient.isHost() : Net.role==="host"; },
  setRule(r){
   if(!this.isHost() || NET_RULE===r) return;
   NET_RULE=r;
-  if(Room.on) Room.pushRule(); else Net.send({t:"m",r});
+  if(RoomClient.on) RoomClient.setRule(r).catch(()=>{}); else Net.send({t:"m",r});
   this.paintRule();
  },
  paintRule(){
@@ -3286,7 +3159,8 @@ const UI = {
   if(h) h.textContent=T(NET_RULE==="score"?"rule_score_s":"rule_attack_s")+(host?"":" "+T("rule_locked"));
  },
  setReady(v){
-  if(Room.on){ Room.set("rdy",v); const m=Room.me(); if(m) m.rdy=v; this.renderRoom(); return; }
+  // no local echo: the stream is the single source of truth for seat state
+  if(RoomClient.on){ RoomClient.setReady(v).catch(()=>{}); return; }
   if(!Net.ready()) return;
   READY_P2P.me=v; Net.send({t:"r",v});
   this.renderRoom();
@@ -3294,45 +3168,9 @@ const UI = {
  },
  peerReady(v){ READY_P2P.peer=v; this.renderRoom(); if(READY_P2P.me&&READY_P2P.peer) startMatch(); },
  setSpectating(v){
-  if(!Room.on) return;
-  Room.set("spec",v);
-  const m=Room.me();
-  if(m){ m.spec=v; if(v){ m.rdy=false; Room.set("rdy",false); } }
-  this.renderRoom();
+  if(RoomClient.on) RoomClient.setSpectating(v).catch(()=>{});
  },
- renderRoom(){
-  const host=$("#seatlist");
-  if(!host) return;
-  const inRoom=Room.on;
-  const me=inRoom?Room.me():null;
-  const players=inRoom?Room.players
-   :(Net.ready()?[{pid:PID,n:CFG.name,rdy:READY_P2P.me,w:WINS_P2P.me},
-           {pid:"peer",n:Net.peerName||T("opponent"),rdy:READY_P2P.peer,w:WINS_P2P.peer}]:[]);
-  const active=players.filter(p=>!p.spec);
-  const rows=players.map(p=>{
-   const you=p.pid===PID;
-   const battling=inRoom&&!!Room.lastGo&&!p.spec&&!p.d&&Room.inRound(p);
-   return '<div class="seat-row'+(p.rdy?" ready":"")+(battling?" battling":"")+(p.spec?" spectating":"")+(you?" mine":"")+'" data-pid="'+esc(p.pid)+'">'+
-    '<div class="nm">'+esc(p.n)+(you?" · "+esc(T("room_you")):"")+(p.spec?" · "+esc(T("room_spectating")):"")+(battling?" · "+esc(T("room_battling")):"")+'</div>'+
-    '<div class="w">'+(p.w|0)+'<small>'+esc(T("room_wins"))+'</small></div></div>';
-  });
-  // an empty bordered box says nothing; name the state instead
-  host.innerHTML=rows.length?rows.join(""):'<p class="empty">'+esc(T("room_empty"))+'</p>';
-  const mySpec=!!(me&&me.spec);
-  const btn=$("#b-ready");
-  const mine=inRoom?!!(me&&me.rdy):READY_P2P.me;
-  if(btn){ btn.textContent=T(mine?"room_unready":"room_ready"); btn.classList.toggle("ready",mine); btn.disabled=active.length<2||mySpec; }
-  const specBtn=$("#b-spectate");
-  if(specBtn){
-   specBtn.hidden=!inRoom||!Room.lastGo;
-   specBtn.textContent=T(mySpec?"room_unspectate":"room_spectate");
-   specBtn.classList.toggle("on",mySpec);
-  }
-  const hint=$("#room-hint");
-  if(hint && hint.dataset.orig===undefined) hint.textContent = active.length<2 ? T("room_alone") : T("room_hint_n",{n:active.length});
-  this.paintRule();
-  this.renderChat();
- },
+ renderRoom(){ RoomView.render(RoomClient.on?RoomClient.view():null); },
  renderChat(){
   const log=RoomClient.on?RoomClient.chat:[];
   const el=$("#chat-log");
@@ -3366,8 +3204,8 @@ const UI = {
   dropBoard();
  },
  roomGone(){
-  if(!Room.on) return;
-  Room.stop(true); Net.reset();
+  if(!RoomClient.on) return;
+  RoomClient.leave().catch(()=>{}); Net.reset();
   this.strandedMatch("e_roomgone");
  },
  peerLost(){
@@ -3377,8 +3215,11 @@ const UI = {
  },
  matchPending(){},
  tallied(won,tie,best){
+  // claim the run before scoring it: gameOver() firing later for the same
+  // well used to run noteRun a second time and double-count the win
+  this._goneFor=G;
   const beat=noteRun(G,won,((G.endedAt||now())-G.startedAt)/1000);
-  if(Net.mode==="room"){ if(won&&Room.on) Room.set("w",(Room.me()||{w:0}).w+1); }
+  if(Net.mode==="room"){ if(won) RoomClient.bumpWin().catch(()=>{}); }
   else if(won) WINS_P2P.me++;
   else if(!tie) WINS_P2P.peer++;
   if(won) Sfx.win();
@@ -3463,14 +3304,15 @@ $("#j-go").onclick=()=>UI.doAnswer();
 $("#j-copy").onclick=()=>UI.copy("#j-out","#j-hint");
 $("#h-in").addEventListener("paste",()=>setTimeout(()=>UI.doAccept(),60));
 $("#j-in").addEventListener("paste",()=>setTimeout(()=>UI.doAnswer(),60));
+const mySeat=()=>RoomClient.on?(RoomClient.view().seats.find(s=>s.pid===PID)||null):null;
 $("#b-ready").onclick=()=>{
  Sfx.ui();
- const m=Room.on?Room.me():null;
- UI.setReady(!(Room.on?!!(m&&m.rdy):READY_P2P.me));
+ const m=mySeat();
+ UI.setReady(!(RoomClient.on?!!(m&&m.rdy):READY_P2P.me));
 };
 $("#b-spectate").onclick=()=>{
  Sfx.ui();
- const m=Room.me();
+ const m=mySeat();
  UI.setSpectating(!(m&&m.spec));
 };
 $$(".rule").forEach(b=>b.onclick=()=>{ Sfx.ui(); UI.setRule(b.dataset.rule); });
