@@ -2555,6 +2555,7 @@ const RoomClient = {
   this.st=RoomState.make(PID); this.st.id=id;
   this.chat=[]; this.seen=new Set(); this.gseq=0; this.lastGo=0; this.starting=0;
   this.sub=Sig.stream(this.path(),ev=>this.onEvent(ev));
+  this.openChat(id);
   this.hbTimer=setInterval(()=>this.beat(),HB_MS);
  },
  onEvent(ev){
@@ -2566,6 +2567,31 @@ const RoomClient = {
   UI.renderRoom();
  },
  onRound(){},
+ // chat streams on its own path, so the cq marker and its ordering hazard are gone
+ openChat(id){
+  this.chatSub=Sig.stream("/chat/"+id,ev=>{
+   if(ev.path==="/") this.chat=this.foldChat(ev.data||{});
+   else{
+    const key=ev.path.slice(1);
+    const m=this.chatMap();
+    if(ev.data===null) delete m[key]; else m[key]=ev.data;
+    this.chat=this.foldChat(m);
+   }
+   UI.renderChat();
+  });
+ },
+ chatMap(){ const o={}; for(const m of this.chat) o[m.key]={n:m.n,m:m.m}; return o; },
+ foldChat(c){
+  return Object.keys(c).sort((a,b)=>parseInt(a,10)-parseInt(b,10)||(a<b?-1:1))
+   .slice(-CHAT_KEEP)
+   .map(k=>({key:k, n:String((c[k]||{}).n||"").slice(0,12), m:String((c[k]||{}).m||"").slice(0,120)}));
+ },
+ async say(text){
+  if(!this.on) return;
+  const t=String(text).slice(0,120);
+  if(!t.trim()) return;
+  await Sig.put("/chat/"+this.id+"/"+(Date.now()+"-"+PID),{n:CFG.name,m:t});
+ },
  async beat(){
   if(!this.on) return;
   const t=Date.now();
@@ -3308,9 +3334,11 @@ const UI = {
   this.renderChat();
  },
  renderChat(){
-  const log=Room.on?Room.chat:[];
+  const log=RoomClient.on?RoomClient.chat:[];
   const el=$("#chat-log");
-  const sig=log.length+":"+(log.length?log[log.length-1].key:"");
+  // the language belongs in the signature: without it the empty-chat line
+  // kept its old wording after a language switch
+  const sig=CFG.lang+":"+log.length+":"+(log.length?log[log.length-1].key:"");
   if(!el || sig===this._chatLogSig) return;
   this._chatLogSig=sig;
   const said=m=>{ const i=String(m.key||"").indexOf("-"); return i<0?"":m.key.slice(i+1); };
@@ -3453,10 +3481,11 @@ $("#p-quit").onclick=()=>{ Sfx.ui(); UI.quitToMenu(); };
 $("#go-menu").onclick=()=>{ Sfx.ui(); UI.backToMenuFromGameOver(); };
 $("#chatbar").addEventListener("submit",e=>{
  e.preventDefault();
- const el=$("#chat-in");
- const t=el.value;
+ const el=$("#chat-in"), t=el.value;
+ if(!t.trim()||!RoomClient.on) return;      // keep the text if it cannot be sent
  el.value="";
- if(t.trim() && Room.on){ Room.say(t); Sfx.ui(); }
+ Sfx.ui();
+ RoomClient.say(t).catch(()=>{});
 });
 const rangePainters=[];
 function bindRange(id,key,label,fmt,after,scale){
