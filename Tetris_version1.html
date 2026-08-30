@@ -3327,7 +3327,9 @@ $("#chatbar").addEventListener("submit",e=>{
  if(!t.trim()||!RoomClient.on) return;      // keep the text if it cannot be sent
  el.value="";
  Sfx.ui();
- RoomClient.say(t).catch(()=>{});
+ // a rejected chat write used to vanish without a trace, which hid a
+ // database rule that denied /chat for as long as it was wrong
+ RoomClient.say(t).catch(err=>{ el.value=t; UI.err("#room-hint",err.message,true); });
 });
 const rangePainters=[];
 function bindRange(id,key,label,fmt,after,scale){
