@@ -897,7 +897,7 @@ const I18N = {
  st_relayed:["RELAYED","중계 연결"],
  st_waiting:["WAITING FOR A CODE","코드 기다리는 중"],
  status:["STATUS","상태"],
- u_cellpct:["{v}% of a cell","한 칸의 {v}%"],
+ u_swipepx:["{v}% · about {px}px","{v}% · 약 {px}px"],
  u_cps:["{v} cells/sec","초당 {v}칸"],
  u_flick:["{v} — {n}","{v} — {n}"],
  u_instant:["instant (0 ms)","즉시 (0 ms)"],
@@ -1861,6 +1861,11 @@ function drawBanners(){
   ctx.globalAlpha=1;
  });
 }
+// which thing the player is actually holding, so the UI can match it
+const LastDevice = {
+ kind: isCoarse()?"touch":"key",
+ note(k){ if(this.kind===k) return; this.kind=k; if(document.body) document.body.dataset.dev=k; }
+};
 const Input = {
  held:{left:false,right:false,softDrop:false},
  dir:0, dasTimer:0, arrTimer:0, soft:false,
@@ -1941,6 +1946,7 @@ addEventListener("keydown",e=>{
  e.preventDefault();
  if(downKeys.has(e.code)) return;
  downKeys.add(e.code);
+ LastDevice.note("key");
  Input.press(k);
 },{passive:false});
 addEventListener("keyup",e=>{
@@ -1950,38 +1956,71 @@ addEventListener("keyup",e=>{
  Input.release(k);
 });
 addEventListener("blur",()=>{ downKeys.clear(); Input.reset(); });
+const PAD_DZ=0.55, PAD_WAKE=0.6;
 const Pad = {
  prev:{}, axis:0, axisDown:false, watching:null,
+ seen:new Map(), live:null,
+ activeId(){ return this.live; },
+ // a bluetooth keyboard can enumerate through the Gamepad API, so a device
+ // counts only once it has actually produced input, and its first-seen axis
+ // values are its zero — a resting offset used to latch a direction forever
+ vet(gp){
+  let s=this.seen.get(gp.id);
+  if(!s){ s={rest:Array.from(gp.axes,v=>v||0), used:false}; this.seen.set(gp.id,s); }
+  if(!s.used && (gp.buttons.some(b=>b&&b.pressed) ||
+    Array.from(gp.axes).some((v,i)=>Math.abs((v||0)-(s.rest[i]||0))>PAD_WAKE))) s.used=true;
+  return s;
+ },
+ pick(){
+  let best=null, bestS=null;
+  for(const g of (navigator.getGamepads()||[])){
+   if(!g||!g.connected) continue;
+   const s=this.vet(g);
+   if(!s.used) continue;
+   if(!best || (g.mapping==="standard" && best.mapping!=="standard")){ best=g; bestS=s; }
+  }
+  const id=best?best.id:null;
+  if(id!==this.live){ this.prev={}; this.axis=0; this.axisDown=false; this.live=id; }
+  return best?{gp:best, rest:bestS.rest}:null;
+ },
  poll(){
   if(!navigator.getGamepads) return;
   if(!CFG.padOn && !this.watching) return;
-  let gp=null;
-  for(const g of navigator.getGamepads()) if(g&&g.connected){ gp=g; break; }
-  if(!gp){ this.prev={}; return; }
+  const sel=this.pick();
+  if(!sel){ this.prev={}; return; }
+  const gp=sel.gp, rest=sel.rest;
   if(this.watching){
    for(let i=0;i<gp.buttons.length;i++) if(gp.buttons[i].pressed && !this.prev[i]){ this.watching(i); break; }
   }
   for(const a of ACTIONS){
    const on=!this.watching && CFG.pads[a].some(i=>gp.buttons[i]&&gp.buttons[i].pressed);
-   if(on && !this.prev["a:"+a]) Input.press(a);
+   if(on && !this.prev["a:"+a]){ LastDevice.note("pad"); Input.press(a); }
    else if(!on && this.prev["a:"+a]) Input.release(a);
    this.prev["a:"+a]=on;
   }
   for(let i=0;i<gp.buttons.length;i++) this.prev[i]=gp.buttons[i].pressed;
-  const x=gp.axes[0]||0, y=gp.axes[1]||0, dz=0.55;
-  const dir=x<-dz?-1:x>dz?1:0;
+  const x=(gp.axes[0]||0)-(rest[0]||0), y=(gp.axes[1]||0)-(rest[1]||0);
+  const dir=x<-PAD_DZ?-1:x>PAD_DZ?1:0;
   if(dir!==this.axis){
    if(this.axis===-1) Input.release("left"); else if(this.axis===1) Input.release("right");
-   if(dir===-1) Input.press("left"); else if(dir===1) Input.press("right");
+   if(dir===-1){ LastDevice.note("pad"); Input.press("left"); }
+   else if(dir===1){ LastDevice.note("pad"); Input.press("right"); }
    this.axis=dir;
   }
-  const down=y>dz;
-  if(down!==this.axisDown){ down?Input.press("softDrop"):Input.release("softDrop"); this.axisDown=down; }
+  const down=y>PAD_DZ;
+  if(down!==this.axisDown){ if(down){ LastDevice.note("pad"); Input.press("softDrop"); } else Input.release("softDrop"); this.axisDown=down; }
  }
 };
+// gestures are measured against a fixed reference, not the rendered cell: tying
+// them to L.cell made a smaller board (or a versus layout) three times twitchier
+const SWIPE_REF_PX=24;
+// the whole window is swipeable; #screen is exactly the canvas box, so the
+// touch area used to shrink with the board
+const SwipeArea = () => document.body;
+const SWIPE_SKIP=".mi,.pausebtn,#dpad-wrap,#act-wrap,.veil,.pause-menu";
 const Swipe = {
  id:null, x0:0, y0:0, t0:0, lx:0, ly:0, moved:0, dropped:false, swapped:false, hold:false,
- cell(){ return (L&&L.cell)?L.cell:24; },
+ cell(){ return SWIPE_REF_PX; },
  inHold(x,y){
   const b=L&&L.hold; if(!b) return false;
   const r=$("#cv").getBoundingClientRect();
@@ -1990,7 +2029,9 @@ const Swipe = {
  },
  down(e){
   if(CFG.touch!=="swipe" || !G || G.over || G.paused) return;
+  if(e.target && e.target.closest && e.target.closest(SWIPE_SKIP)) return;
   if(this.id!==null) return;
+  LastDevice.note("touch");
   this.id=e.pointerId;
   this.x0=this.lx=e.clientX; this.y0=this.ly=e.clientY; this.t0=now();
   this.moved=0; this.dropped=false; this.swapped=false;
@@ -2037,7 +2078,7 @@ const Swipe = {
  }
 };
 {
- const sc=$("#screen");
+ const sc=SwipeArea();
  sc.addEventListener("pointerdown",e=>{ Swipe.down(e); },{passive:true});
  sc.addEventListener("pointermove",e=>{ Swipe.move(e); },{passive:true});
  sc.addEventListener("pointerup",e=>Swipe.up(e));
@@ -3479,8 +3520,8 @@ $("#s-padon").onclick=()=>{
 };
 addEventListener("gamepadconnected",()=>{ if(UI.cur==="#v-set") paintPad(); });
 addEventListener("gamepaddisconnected",()=>{ if(UI.cur==="#v-set") paintPad(); });
-bindRange("#s-swmove","swMove","#l-swmove",v=>T("u_cellpct",{v}));
-bindRange("#s-swdrop","swDrop","#l-swdrop",v=>T("u_cellpct",{v}));
+bindRange("#s-swmove","swMove","#l-swmove",v=>T("u_swipepx",{v,px:Math.round(SWIPE_REF_PX*v/100)}));
+bindRange("#s-swdrop","swDrop","#l-swdrop",v=>T("u_swipepx",{v,px:Math.round(SWIPE_REF_PX*v/100)}));
 bindRange("#s-swflick","swFlick","#l-swflick",
  v=>T("u_flick",{v:(v/100).toFixed(2)+" px/ms", n:T(v<=80?"f_gentle":v<=150?"f_normal":"f_firm")}));
 $("#b-swreset").onclick=()=>{

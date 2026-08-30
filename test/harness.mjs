@@ -4,7 +4,18 @@ import { chromium } from "playwright";
 let browser = null;
 const stamp = () => new Date().toISOString().slice(11, 23);
 
-export async function openClients(n, { mockUrl, pageUrl, name = "C" }) {
+// Replaces navigator.getGamepads with a scriptable fake. `pads` is the initial
+// list; tests drive it through window.__pads afterwards.
+export const fakeGamepads = pads => `
+  window.__pads = ${JSON.stringify(pads)};
+  navigator.getGamepads = () => window.__pads.map(p => p && ({
+    connected: true, id: p.id || "fake", mapping: p.mapping || "",
+    axes: p.axes || [0, 0],
+    buttons: (p.buttons || []).map(b => ({ pressed: !!b, value: b ? 1 : 0 })),
+  }));
+`;
+
+export async function openClients(n, { mockUrl, pageUrl, name = "C", init = null }) {
   browser = browser || await chromium.launch();
   const out = [];
   for (let i = 0; i < n; i++) {
@@ -22,6 +33,7 @@ export async function openClients(n, { mockUrl, pageUrl, name = "C" }) {
     });
     // seed the signalling URL before any script runs
     await page.addInitScript(u => localStorage.setItem("tfx:fbUrl", JSON.stringify(u)), mockUrl);
+    if (init) await page.addInitScript(init);
     await page.goto(pageUrl);
     await page.waitForFunction(() => typeof CFG !== "undefined");
     out.push({
